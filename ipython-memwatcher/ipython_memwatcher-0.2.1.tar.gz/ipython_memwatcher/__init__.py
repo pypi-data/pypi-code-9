@@ -1,0 +1,1 @@
+from ipython_memwatcher.memwatcher import MemWatcher
