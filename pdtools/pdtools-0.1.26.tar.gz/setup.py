@@ -1,0 +1,20 @@
+'''
+I know this is confusing naming, this is a temp fix
+'''
+
+from setuptools import setup, find_packages
+
+setup(
+    name="pdtools",
+    version="0.1.26",
+    author="Paradrop Labs",
+    description="Paradrop deployment and build tools",
+    install_requires=['docopt', 'requests', 'twisted', 'bcrypt', 'service-identity', 'colorama'],
+    packages=find_packages(),
+
+    entry_points={
+        'console_scripts': [
+            'pdtools=pdtools.main:main',
+        ],
+    },
+)
