@@ -1,0 +1,3 @@
+
+class DobermanImproperlyConfigured(Exception):
+    pass
