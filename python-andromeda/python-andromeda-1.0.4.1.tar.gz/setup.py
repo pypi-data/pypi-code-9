@@ -1,0 +1,42 @@
+from distutils.core import setup
+
+setup(
+    name='python-andromeda',
+    version='1.0.4.1',
+    packages=['', 'subcmds'],
+    url='https://github.com/mynameismevin/andromeda',
+    license='Apache License Version 2.0',
+    author='Mike Lloyd',
+    author_email='kevin.michael.lloyd@gmail.com',
+    maintainer='Mike Lloyd',
+    maintainer_email='kevin.michael.lloyd@gmail.com',
+    description='OpenStack Repository Management Tool.',
+    install_requires=['gitconfig'],
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Environment :: Console',
+        'Environment :: OpenStack',
+        'Intended Audience :: End Users/Desktop',
+        'Intended Audience :: Developers',
+        'Intended Audience :: System Administrators',
+        'License :: OSI Approved :: Apache Software License',
+        'Operating System :: MacOS :: MacOS X',
+        'Operating System :: Microsoft :: Windows',
+        'Operating System :: POSIX :: Linux',
+        'Programming Language :: Python',
+        'Topic :: Software Development',
+        'Topic :: Software Development :: Build Tools',
+        'Topic :: Software Development :: Quality Assurance',
+        'Topic :: Software Development :: Testing',
+        'Topic :: Software Development :: Bug Tracking',
+        'Topic :: Software Development :: Version Control',
+        'Topic :: Software Development :: Version Control :: CVS',
+        'Topic :: Software Development :: Version Control :: RCS',
+        'Topic :: Software Development :: Version Control :: SCCS',
+        'Topic :: Utilities'
+    ],
+    scripts=['andromeda'],
+    entry_points={
+        'console_scripts': ['andromeda=andromeda:main']
+    }
+)
