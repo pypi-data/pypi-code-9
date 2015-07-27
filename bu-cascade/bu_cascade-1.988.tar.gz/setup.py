@@ -1,0 +1,51 @@
+from setuptools import find_packages
+import os.path
+import re
+
+try:
+    from setuptools import setup
+except ImportError:
+    from distutils.core import setup
+
+
+def fpath(name):
+    return os.path.join(os.path.dirname(__file__), name)
+
+
+def read(fname):
+    return open(fpath(fname)).read()
+
+
+def grep(attrname):
+    pattern = r"{0}\W*=\W*'([^']+)'".format(attrname)
+    strval, = re.findall(pattern, file_text)
+    return strval
+
+
+file_text = read(fpath('bu_cascade/__init__.py'))
+
+setup(
+    name='bu_cascade',
+    version=1.988,
+    description='Cascade Server web services integration',
+    long_description='',
+    url='https://github.com/betheluniversity/cascade/',
+    download_url='',
+    author='Eric Jameson',
+    author_email="e-jameson@bethel.edu",
+    license='Apache 2.0',
+    packages=find_packages(),
+    zip_safe=False,
+    install_requires=[
+        'wtforms', 'suds'
+    ],
+    test_suite="",
+    classifiers=[],
+    include_package_data=True,
+    data_files=[
+        ('bu_cascade/dynamic_data_def_builder/static',
+         ['bu_cascade/dynamic_data_def_builder/static/dynamic_scripts.js',
+          'bu_cascade/dynamic_data_def_builder/static/dynamic_style.css']
+        )
+    ]
+)
