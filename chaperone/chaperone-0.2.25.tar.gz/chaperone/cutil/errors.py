@@ -1,0 +1,17 @@
+class ChError(Exception):
+    pass
+
+class ChParameterError(ChError):
+    pass
+
+class ChNotFoundError(ChError):
+    pass
+
+class ChSystemError(ChError):
+    pass
+
+class ChProcessError(ChError):
+    pass
+
+class ChVariableError(ChError):
+    pass
