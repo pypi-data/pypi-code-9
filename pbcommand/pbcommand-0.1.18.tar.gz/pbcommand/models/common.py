@@ -1,0 +1,399 @@
+"""Core models used in the ToolContract and Resolved ToolContract
+
+
+Large parts of this are pulled from pbsmrtpipe.
+
+Author: Michael Kocher
+"""
+import json
+import logging
+import os
+import re
+import warnings
+import functools
+import datetime
+
+log = logging.getLogger(__name__)
+
+REGISTERED_FILE_TYPES = {}
+
+
+class PacBioNamespaces(object):
+    # File Types
+    # PBSMRTPIPE_FILE_PREFIX = 'pbsmrtpipe.files'
+    # NEW File Type Identifier style Prefix
+    NEW_PBSMRTPIPE_FILE_PREFIX = "PacBio.FileTypes"
+    # New DataSet Identifier Prefix
+    DATASET_FILE_PREFIX = "PacBio.DataSet"
+
+    PB_INDEX = "PacBio.Index"
+
+    # Task Ids
+    PBSMRTPIPE_TASK_PREFIX = 'pbsmrtpipe.tasks'
+    # Task Options
+    PBSMRTPIPE_TASK_OPTS_PREFIX = 'pbsmrtpipe.task_options'
+    # Workflow Level Options
+    PBSMRTPIPE_OPTS_PREFIX = 'pbsmrtpipe.options'
+    # Constants
+    PBSMRTPIPE_CONSTANTS_PREFIX = 'pbsmrtpipe.constants'
+    # Pipelines
+    PBSMRTPIPE_PIPELINES = "pbsmrtpipe.pipelines"
+
+
+def __to_type(prefix, name):
+    return ".".join([prefix, name])
+
+to_constant_ns = functools.partial(__to_type, PacBioNamespaces.PBSMRTPIPE_CONSTANTS_PREFIX)
+to_file_ns = functools.partial(__to_type, PacBioNamespaces.NEW_PBSMRTPIPE_FILE_PREFIX)
+to_ds_ns = functools.partial(__to_type, PacBioNamespaces.DATASET_FILE_PREFIX)
+to_task_option_ns = functools.partial(__to_type, PacBioNamespaces.PBSMRTPIPE_TASK_OPTS_PREFIX)
+to_task_ns = functools.partial(__to_type, PacBioNamespaces.PBSMRTPIPE_TASK_PREFIX)
+to_workflow_option_ns = functools.partial(__to_type, PacBioNamespaces.PBSMRTPIPE_OPTS_PREFIX)
+to_pipeline_ns = functools.partial(__to_type, PacBioNamespaces.PBSMRTPIPE_PIPELINES)
+to_index_ns = functools.partial(__to_type, PacBioNamespaces.PB_INDEX)
+
+
+class TaskTypes(object):
+
+    """Task types used in workflow engine. Local will run the task as a subprocess,
+    Distributed will run the process on a remote node if the workflow has been configured with a cluster manager.
+
+    Most tasks should be set to be Distributed, only extremely light weight tasks
+    should be set to LOCAL.
+    """
+    # perhaps this should have it's own namespace
+    # pbsmrtpipe.task_types.
+    LOCAL = to_constant_ns('local_task')
+    DISTRIBUTED = to_constant_ns('distributed_task')
+
+
+class SymbolTypes(object):
+
+    """*Symbols* that are understood durning resolving, such as max number of
+    processors, Max Chunks"""
+    MAX_NPROC = '$max_nproc'
+    MAX_NCHUNKS = '$max_nchunks'
+    TASK_TYPE = '$task_type'
+    RESOLVED_OPTS = '$ropts'
+    SCHEMA_OPTS = '$opts_schema'
+    OPTS = '$opts'
+    NCHUNKS = '$nchunks'
+    NPROC = '$nproc'
+
+
+class ResourceTypes(object):
+
+    """Resources such as tmp dirs and files, log files"""
+    TMP_DIR = '$tmpdir'
+    TMP_FILE = '$tmpfile'
+    LOG_FILE = '$logfile'
+    # tasks can write output to this directory
+    OUTPUT_DIR = '$outputdir'
+    # Not sure this is a good idea
+    #TASK_DIR = '$taskdir'
+
+    @classmethod
+    def ALL(cls):
+        return cls.TMP_DIR, cls.TMP_FILE, cls.LOG_FILE, cls.OUTPUT_DIR
+
+    @classmethod
+    def is_tmp_resource(cls, name):
+        return name in (cls.TMP_FILE, cls.TMP_DIR)
+
+    @classmethod
+    def is_valid(cls, attr_name):
+        return attr_name in cls.ALL()
+
+
+class _RegisteredFileType(type):
+
+    def __init__(cls, name, bases, dct):
+        super(_RegisteredFileType, cls).__init__(name, bases, dct)
+
+    def __call__(cls, *args, **kwargs):
+        if len(args) != 4:
+            log.error(args)
+            raise ValueError("Incorrect initialization for {c}".format(c=cls.__name__))
+
+        file_type_id, base_name, file_ext, mime_type = args
+        file_type = REGISTERED_FILE_TYPES.get(file_type_id, None)
+
+        if file_type is None:
+            file_type = super(_RegisteredFileType, cls).__call__(*args)
+            #log.debug("Registering file type '{i}'".format(i=file_type_id))
+            REGISTERED_FILE_TYPES[file_type_id] = file_type
+        else:
+            # print warning if base name, ext, mime type aren't the same
+            attrs_names = [('base_name', base_name),
+                           ('ext', file_ext),
+                           ('mime_type', mime_type)]
+
+            for attrs_name, value in attrs_names:
+                v = getattr(file_type, attrs_name)
+                if v != value:
+                    _msg = "Attempting to register a file with a different '{x}' -> {v} (expected {y})".format(x=attrs_name, v=v, y=value)
+                    log.warn(_msg)
+                    warnings.warn(_msg)
+
+        return file_type
+
+
+class FileType(object):
+    __metaclass__ = _RegisteredFileType
+
+    def __init__(self, file_type_id, base_name, ext, mime_type):
+        self.file_type_id = file_type_id
+        self.base_name = base_name
+        self.ext = ext
+        self.mime_type = mime_type
+
+        if file_type_id not in REGISTERED_FILE_TYPES:
+            REGISTERED_FILE_TYPES[file_type_id] = self
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            if self.file_type_id == other.file_type_id:
+                if self.base_name == other.base_name:
+                    if self.ext == other.ext:
+                        return True
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __repr__(self):
+        _d = dict(k=self.__class__.__name__,
+                  i=self.file_type_id,
+                  b=self.base_name, e=self.ext)
+        return "<{k} id={i} name={b}.{e} >".format(**_d)
+
+
+class FileTypes(object):
+
+    """Registry of all PacBio Files types
+
+    This needs to be cleaned up and solidified. The old pre-SA3 file types need to be deleted.
+
+    """
+
+    # generic Txt file
+    TXT = FileType(to_file_ns('txt'), 'file', 'txt', 'text/plain')
+
+    # THIS NEEDS TO BE CONSISTENT with scala code. When the datastore
+    # is written to disk the file type id's might be translated to
+    # the DataSet style file type ids.
+    REPORT = FileType(to_file_ns('JsonReport'), "report", "json", 'application/json')
+    CHUNK = FileType(to_file_ns("CHUNK"), "chunk", "json", 'application/json')
+
+    FASTA = FileType(to_file_ns('Fasta'), "file", "fasta", 'text/plain')
+    FASTQ = FileType(to_file_ns('Fastq'), "file", "fastq", 'text/plain')
+
+    # Not sure this should be a special File Type?
+    INPUT_XML = FileType(to_file_ns('input_xml'), "input", "xml", 'application/xml')
+    FOFN = FileType(to_file_ns("generic_fofn"), "generic", "fofn", 'text/plain')
+    MOVIE_FOFN = FileType(to_file_ns('movie_fofn'), "movie", "fofn", 'text/plain')
+    RGN_FOFN = FileType(to_file_ns('rgn_fofn'), "region", "fofn", 'text/plain')
+
+    RS_MOVIE_XML = FileType(to_file_ns("rs_movie_metadata"), "file", "rs_movie.metadata.xml", "application/xml")
+    REF_ENTRY_XML = FileType(to_file_ns('reference_info_xml'), "reference.info.xml", "xml", 'application/xml')
+
+    ALIGNMENT_CMP_H5 = FileType(to_file_ns('alignment_cmp_h5'), "alignments", "cmp.h5", 'application/octet-stream')
+    # I am not sure this should be a first class file
+    BLASR_M4 = FileType(to_file_ns('blasr_file'), 'blasr', 'm4', 'text/plain')
+    BAM = FileType(to_file_ns('bam'), "alignments", "bam", 'application/octet-stream')
+    BAMBAI = FileType(to_file_ns('bam_bai'), "alignments", "bam.bai", 'application/octet-stream')
+
+    BED = FileType(to_file_ns('bed'), "file", "bed", 'text/plain')
+    SAM = FileType(to_file_ns('sam'), "alignments", "sam", 'application/octet-stream')
+    VCF = FileType(to_file_ns('vcf'), "file", "vcf", 'text/plain')
+    GFF = FileType(to_file_ns('gff'), "file", "gff", 'text/plain')
+    CSV = FileType(to_file_ns('csv'), "file", "csv", 'text/csv')
+    XML = FileType(to_file_ns('xml'), "file", "xml", 'application/xml')
+    # Generic Json File
+    JSON = FileType(to_file_ns("json"), "file", "json", "application/json")
+    # Generic H5 File
+    H5 = FileType(to_file_ns("h5"), "file", "h5", "application/octet-stream")
+
+    # ******************* NEW SA3 File Types ********************
+    # DataSet Types. The default file names should have well-defined agreed
+    # upon format. See what Dave did for the bam files.
+    # https://github.com/PacificBiosciences/PacBioFileFormats
+    DS_SUBREADS_H5 = FileType(to_ds_ns("HdfSubreadSet"), "file", "h5.subreads.xml", "application/xml")
+    DS_SUBREADS = FileType(to_ds_ns("SubreadSet"), "file", "subreads.xml", "application/xml")
+    DS_CCS = FileType(to_ds_ns("CCSreadSet"), "file", "ccsread.dataset.xml", "application/xml")
+    DS_REF = FileType(to_file_ns("ReferenceSet"), "file", "reference.dataset.xml", "application/xml")
+    DS_BAM = FileType(to_file_ns("AlignmentSet"), "file", "aligned.dataset.xml", "application/xml")
+    DS_CONTIG = FileType(to_file_ns("ContigSet"), "file", "contigset.dataset.xml", "application/xml")
+    DS_BARCODE = FileType(to_file_ns("BarcodeSet"), "file", "barcode.dataset.xml", "application/xml")
+
+    # Index Files
+    I_SAM = FileType(to_index_ns("SamIndex"), "file", "sam.index", "application/octet-stream")
+    I_SAW = FileType(to_index_ns("SaWriterIndex"), "file", "sa", "application/octet-stream")
+
+    # PacBio Defined Formats
+    FASTA_BC = FileType("PacBio.BarcodeFile.BarcodeFastaFile", "file", "barcode.fasta", "text/plain")
+    # No ':' or '"' in the id
+    FASTA_REF = FileType("PacBio.ReferenceFile.ReferenceFastaFile", "file", "pbreference.fasta", "text/plain")
+
+    # FIXME. Add Bax/Bam Formats here. This should replace the exiting pre-SA3 formats.
+    BAM_ALN = FileType("PacBio.AlignmentFile.AlignmentBamFile", "file", "alignment.bam", "application/octet-stream")
+    BAM_SUB = FileType("PacBio.SubreadFile.SubreadBamFile", "file", "subread.bam", "application/octet-stream")
+    BAM_CCS = FileType("PacBio.CCSreadFile.CCSreadBamFile", "file", "ccs.bam", "application/octet-stream")
+
+    BAX = FileType("PacBio.SubreadFile.BaxFile", "file", "bax.h5", "application/octet-stream")
+
+    @staticmethod
+    def is_valid_id(file_type_id):
+        return file_type_id in REGISTERED_FILE_TYPES
+
+
+class DataStoreFile(object):
+
+    def __init__(self, uuid, file_id, type_id, path):
+        # adding this for consistency. In the scala code, the unique id must be
+        # a uuid format
+        self.uuid = uuid
+        # this must globally unique. This is used to provide context to where
+        # the file originated from (i.e., the tool author
+        self.file_id = file_id
+        # Consistent with a value in FileTypes
+        self.file_type_id = type_id
+        self.path = path
+        self.file_size = os.path.getsize(path)
+        self.created_at = datetime.datetime.fromtimestamp(os.path.getctime(path))
+        self.modified_at = datetime.datetime.fromtimestamp(os.path.getmtime(path))
+
+    def __repr__(self):
+        _d = dict(k=self.__class__.__name__,
+                  i=self.file_id,
+                  t=self.file_type_id,
+                  p=os.path.basename(self.path))
+        return "<{k} {i} type:{t} filename:{p} >".format(**_d)
+
+    def to_dict(self):
+        return dict(sourceId=self.file_id,
+                    uniqueId=str(self.uuid),
+                    fileTypeId=self.file_type_id,
+                    path=self.path,
+                    fileSize=self.file_size,
+                    createdAt=_datetime_to_string(self.created_at),
+                    modifiedAt=_datetime_to_string(self.modified_at))
+
+    @staticmethod
+    def from_dict(d):
+        # FIXME. This isn't quite right.
+        to_a = lambda x: x.encode('ascii', 'ignore')
+        to_k = lambda x: to_a(d[x])
+        return DataStoreFile(to_k('uniqueId'), to_k('sourceId'), to_k('fileTypeId'), to_k('path'))
+
+
+def _datetime_to_string(dt):
+    return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+class DataStore(object):
+    version = "0.2.2"
+
+    def __init__(self, ds_files, created_at=None):
+        """
+
+        :type ds_files: list[DataStoreFile]
+        """
+        self.files = {f.uuid: f for f in ds_files}
+        self.created_at = datetime.datetime.now() if created_at is None else created_at
+        self.updated_at = datetime.datetime.now()
+
+    def __repr__(self):
+        _d = dict(n=len(self.files), k=self.__class__.__name__)
+        return "<{k} nfiles={n} >".format(**_d)
+
+    def add(self, ds_file):
+        if isinstance(ds_file, DataStoreFile):
+            self.files[ds_file.uuid] = ds_file
+            self.updated_at = datetime.datetime.now()
+        else:
+            raise TypeError("DataStoreFile expected. Got type {t} for {d}".format(t=type(ds_file), d=ds_file))
+
+    def to_dict(self):
+        fs = [f.to_dict() for i, f in self.files.iteritems()]
+        _d = dict(version=self.version,
+                  createdAt=_datetime_to_string(self.created_at),
+                  updatedAt=_datetime_to_string(self.updated_at), files=fs)
+        return _d
+
+    def _write_json(self, file_name, permission):
+        with open(file_name, permission) as f:
+            s = json.dumps(self.to_dict(), indent=4, sort_keys=True)
+            f.write(s)
+
+    def write_json(self, file_name):
+        # if the file exists is should raise?
+        self._write_json(file_name, 'w')
+
+    def write_update_json(self, file_name):
+        """Overwrite Datastore with current state"""
+        self._write_json(file_name, 'w+')
+
+    @staticmethod
+    def load_from_json(path):
+        with open(path, 'r') as reader:
+            d = json.loads(reader.read())
+
+        ds_files = [DataStoreFile.from_dict(x) for x in d['files']]
+        return DataStore(ds_files)
+
+
+def _is_chunk_key(k):
+    return k.startswith(PipelineChunk.CHUNK_KEY_PREFIX)
+
+
+class MalformedChunkKeyError(ValueError):
+
+    """Chunk Key does NOT adhere to the spec"""
+    pass
+
+
+class PipelineChunk(object):
+
+    CHUNK_KEY_PREFIX = "$chunk."
+    RX_CHUNK_KEY = re.compile(r'^\$chunk\.([A-z0-9_]*)')
+
+    def __init__(self, chunk_id, **kwargs):
+        """
+
+        kwargs is a key-value store. keys that begin "$chunk." are considered
+        to be semantically understood by workflow and can be "routed" to
+        chunked task inputs.
+
+        Values that don't begin with "$chunk." are considered metadata.
+
+
+        :param chunk_id: Chunk id
+        :type chunk_id: str
+
+        """
+        if self.RX_CHUNK_KEY.match(chunk_id) is not None:
+            raise MalformedChunkKeyError("'{c}' expected {p}".format(c=chunk_id, p=self.RX_CHUNK_KEY.pattern))
+
+        self.chunk_id = chunk_id
+        # loose key-value pair
+        self._datum = kwargs
+
+    def __repr__(self):
+        _d = dict(k=self.__class__.__name__, i=self.chunk_id, c=",".join(self.chunk_keys))
+        return "<{k} id='{i}' chunk keys={c} >".format(**_d)
+
+    @property
+    def chunk_d(self):
+        return {k: v for k, v in self._datum.iteritems() if _is_chunk_key(k)}
+
+    @property
+    def chunk_keys(self):
+        return self.chunk_d.keys()
+
+    @property
+    def chunk_metadata(self):
+        return {k: v for k, v in self._datum.iteritems() if not _is_chunk_key(k)}
+
+    def to_dict(self):
+        return {'chunk_id': self.chunk_id, 'chunk': self._datum}
