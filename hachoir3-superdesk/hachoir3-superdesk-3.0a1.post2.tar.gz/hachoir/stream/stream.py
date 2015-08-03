@@ -1,0 +1,3 @@
+class StreamError(Exception):
+    pass
+
