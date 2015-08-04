@@ -1,0 +1,6 @@
+MANGOPAY_CLIENT_ID = 'chouette'
+MANGOPAY_PASSPHRASE = 'ci1pLQoOXP7pOoTnEQsYKnZANJGqUxiLafXzP8FTONSq1O28vw'
+MANGOPAY_API_URL = 'https://api.mangopay.com/v2/'
+MANGOPAY_API_SANDBOX_URL = 'https://api.sandbox.mangopay.com/v2/'
+MANGOPAY_USE_SANDBOX = True
+MANGOPAY_API_VERSION = 2
