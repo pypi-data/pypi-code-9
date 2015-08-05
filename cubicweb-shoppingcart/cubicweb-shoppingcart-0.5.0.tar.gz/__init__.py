@@ -1,0 +1,1 @@
+"""cubicweb-shoppingcart application package"""
