@@ -1,0 +1,1 @@
+from hpcm import HPCJobManager
