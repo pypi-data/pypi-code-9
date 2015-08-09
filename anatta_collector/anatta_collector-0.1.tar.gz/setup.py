@@ -1,0 +1,11 @@
+from setuptools import setup
+
+setup(name='anatta_collector',
+      version='0.1',
+      description='',
+      url='https://github.com/kevinslin',
+      author='Kevin S Lin',
+      author_email='kevinslin8@gmail.com',
+      license='MIT',
+      packages=['anatta_collector'],
+      zip_safe=False)
