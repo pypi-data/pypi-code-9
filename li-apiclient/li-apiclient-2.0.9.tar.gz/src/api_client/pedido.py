@@ -1,0 +1,9 @@
+from api_client.utils import ApiClientBase
+
+class ApiPedido(ApiClientBase):
+    NOME = "API_PEDIDO"
+    AUTENTICA_APLICACAO = True
+
+    def alterar_situacao(self, loja_id, pedido_numero, situacao_id, por, **kwargs):
+        path = '/loja/{}/pedido/{}/situacao/{}/{}'.format(loja_id,pedido_numero,situacao_id,por)
+        return self.to_dict(path, method="put", meta=True, **kwargs)
