@@ -1,0 +1,1 @@
+LOGFILE = '/tmp/zymbit.log'
