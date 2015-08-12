@@ -1,0 +1,8 @@
+
+VERSION = '0.6.1'
+REPO_HASH = 'fc6a4cc'
+BUILD_DATE = '2015.8.12'
+BUILD_TIME = '12.27.40'
+BUILD_HOST = 'mojo.sigma'
+BUILD_USER = 'moertle'
+FULL_VERSION = '0.6.1+2015.8.12.fc6a4cc'
