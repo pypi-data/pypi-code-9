@@ -1,0 +1,4 @@
+
+
+class NotImplementedError(Exception):
+    pass
