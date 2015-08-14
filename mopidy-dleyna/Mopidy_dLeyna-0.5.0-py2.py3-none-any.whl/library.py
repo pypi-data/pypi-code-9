@@ -1,0 +1,365 @@
+from __future__ import absolute_import, unicode_literals
+
+import collections
+import logging
+import os
+
+from mopidy import backend
+from mopidy.models import Album, Artist, Image, Ref, SearchResult, Track
+
+import pykka
+
+from uritools import uricompose, urisplit
+
+from . import Extension
+
+logger = logging.getLogger(__name__)
+
+
+ALBUM_TYPE_EX = 'container.album.musicAlbum'
+
+ARTIST_TYPE_EX = 'container.person.musicArtist'
+
+BROWSE_FILTER = [
+    'DisplayName',
+    'Path',
+    'RefPath',
+    'Type',
+    'TypeEx'
+]
+
+IMAGES_FILTER = [
+    'AlbumArtURL',
+    'Path'
+]
+
+SEARCH_FILTER = [
+    'Album',
+    'AlbumArtURL',
+    'Artist',
+    'Artists',
+    'Creator',
+    'Date',
+    'DisplayName',
+    'Duration',
+    'Genre',
+    'Path',
+    'RefPath',
+    'TrackNumber',
+    'Type',
+    'TypeEx',
+]
+
+LOOKUP_QUERY = 'Type = "music"'
+
+QUERY_MAPPING = [{
+    'any': """
+    DisplayName contains {0}
+    or Album contains {0}
+    or Artist contains {0}
+    or Genre contains {0}
+    """,
+    # 'uri',
+    'track_name': 'Type = "music" and DisplayName contains {0}',
+    'album': 'Album contains {0}',
+    'artist': 'Artist contains {0}',
+    # 'composer',
+    # 'performer',
+    # 'albumartist',
+    'genre': 'Genre contains {0}',
+    'track_no': 'TrackNumber = {0}',
+    'date': 'Date contains {0}',
+    # 'comment'
+}, {
+    'any': 'DisplayName = {0} or Album = {0} or Artist = {0} or Genre = {0}',
+    # 'uri',
+    'track_name': 'Type = "music" and DisplayName = {0}',
+    'album': 'Album = {0}',
+    'artist': 'Artist = {0}',
+    # 'composer',
+    # 'performer',
+    # 'albumartist',
+    'genre': 'Genre = {0}',
+    'track_no': 'TrackNumber = {0}',
+    'date': 'Date = {0}',
+    # 'comment'
+}]
+
+SCHEME = Extension.ext_name
+
+
+def _quote(s):
+    return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def _name_to_uri(path, type_ex, name):
+    root = os.path.dirname(path)  # TODO: obj['Parent']?
+    query = 'TypeEx = %s and DisplayName = %s' % (type_ex, _quote(name))
+    return uricompose(SCHEME, path=root, query=query)
+
+
+def _name_to_album(path, name):
+    return Album(name=name, uri=_name_to_uri(path, ALBUM_TYPE_EX, name))
+
+
+def _name_to_artist(path, name):
+    return Artist(name=name, uri=_name_to_uri(path, ARTIST_TYPE_EX, name))
+
+
+def _properties_to_ref(server, obj):
+    if 'RefPath' in obj:
+        assert obj['RefPath'].startswith(server['Path'])
+        path = obj['RefPath'][len(server['Path']):]
+    else:
+        assert obj['Path'].startswith(server['Path'])
+        path = obj['Path'][len(server['Path']):]
+    uri = uricompose(SCHEME, host=server['UDN'], path=path)
+    name = obj['DisplayName']
+    type_ex = obj.get('TypeEx', obj['Type'])
+    if type_ex == ALBUM_TYPE_EX:
+        return Ref.album(name=name, uri=uri)
+    elif type_ex == ARTIST_TYPE_EX:
+        return Ref.artist(name=name, uri=uri)
+    elif type_ex == 'music' or type_ex == 'audio':
+        return Ref.track(name=name, uri=uri)
+    elif obj['Type'] == 'container':
+        return Ref.directory(name=name, uri=uri)
+    else:
+        return None
+
+
+def _properties_to_model(server, obj):
+    type_ex = obj.get('TypeEx', obj['Type'])
+    if type_ex == ALBUM_TYPE_EX:
+        return _properties_to_album(server, obj)
+    elif type_ex == ARTIST_TYPE_EX:
+        return _properties_to_artist(server, obj)
+    elif type_ex == 'music' or type_ex == 'audio':
+        return _properties_to_track(server, obj)
+    else:
+        return None
+
+
+def _properties_to_album(server, obj):
+    if 'RefPath' in obj:
+        assert obj['RefPath'].startswith(server['Path'])
+        path = obj['RefPath'][len(server['Path']):]
+    else:
+        assert obj['Path'].startswith(server['Path'])
+        path = obj['Path'][len(server['Path']):]
+    if 'Creator' in obj:
+        artists = [_name_to_artist(path, obj['Creator'])]
+    else:
+        artists = None
+    if 'AlbumArtURL' in obj:
+        images = [obj['AlbumArtURL']]
+    else:
+        images = None
+    return Album(
+        uri=uricompose(SCHEME, host=server['UDN'], path=path),
+        name=obj['DisplayName'],
+        artists=artists,
+        images=images,
+        num_tracks=obj.get('ItemCount', obj.get('ChildCount')),
+    )
+
+
+def _properties_to_artist(server, obj):
+    if 'RefPath' in obj:
+        assert obj['RefPath'].startswith(server['Path'])
+        path = obj['RefPath'][len(server['Path']):]
+    else:
+        assert obj['Path'].startswith(server['Path'])
+        path = obj['Path'][len(server['Path']):]
+    return Artist(
+        uri=uricompose(SCHEME, host=server['UDN'], path=path),
+        name=obj['DisplayName']
+    )
+
+
+def _properties_to_track(server, obj):
+    if 'RefPath' in obj:
+        assert obj['RefPath'].startswith(server['Path'])
+        path = obj['RefPath'][len(server['Path']):]
+    else:
+        assert obj['Path'].startswith(server['Path'])
+        path = obj['Path'][len(server['Path']):]
+    if 'Album' in obj:
+        album = _name_to_album(path, obj['Album'])
+        if 'AlbumArtURL' in obj:
+            album = album.copy(images=[obj['AlbumArtURL']])
+    else:
+        album = None
+    if 'Artists' in obj:
+        artists = [_name_to_artist(path, name) for name in obj['Artists']]
+    elif 'Artist' in obj:
+        artists = [_name_to_artist(path, obj['Artists'])]
+    else:
+        artists = None
+    if 'Duration' in obj:
+        length = obj['Duration'] * 1000
+    else:
+        length = None
+    return Track(
+        uri=uricompose(SCHEME, host=server['UDN'], path=path),
+        name=obj['DisplayName'],
+        artists=artists,
+        album=album,
+        date=obj.get('Date'),
+        genre=obj.get('Genre'),
+        length=length,
+        track_no=obj.get('TrackNumber')
+    )
+
+
+def _map(future, func):
+    wrapper = future.__class__()
+    wrapper.set_get_hook(lambda timeout: func(future.get(timeout)))
+    return wrapper
+
+
+class dLeynaLibraryProvider(backend.LibraryProvider):
+
+    root_directory = Ref.directory(
+        uri=uricompose(SCHEME),
+        name='Digital Media Servers'
+    )
+
+    def browse(self, uri):
+        refs = []
+        dleyna = self.backend.dleyna
+        if uri == self.root_directory.uri:
+            for server in dleyna.servers().get():
+                name = server['FriendlyName']
+                uri = uricompose(SCHEME, host=server['UDN'])
+                refs.append(Ref.directory(name=name, uri=uri))
+        else:
+            parts = urisplit(uri)
+            server = dleyna.server(parts.gethost()).get()
+            path = server['Path'] + parts.getpath()
+            future = dleyna.children(path, filter=BROWSE_FILTER)
+            for obj in future.get():
+                ref = _properties_to_ref(server, obj)
+                if ref:
+                    refs.append(ref)
+                else:
+                    logger.debug('Skipping dLeyna browse result %r', obj)
+        return refs
+
+    def get_images(self, uris):
+        dleyna = self.backend.dleyna
+        servers = {obj['UDN']: obj for obj in dleyna.servers().get()}
+        pathmap = collections.defaultdict(list)  # udn -> paths
+        urimap = {}  # path -> uri
+        for uri in uris:
+            parts = urisplit(uri)
+            udn = parts.gethost()
+            path = servers[udn]['Path'] + parts.getpath()
+            urimap[path] = uri
+            pathmap[udn].append(path)
+        futures = []
+        for udn, paths in pathmap.items():
+            futures.extend(self.__lookup(servers[udn], paths, IMAGES_FILTER))
+        results = {}
+        for obj in (obj for future in futures for obj in future.get()):
+            try:
+                image = Image(uri=obj['AlbumArtURL'])
+            except KeyError:
+                logger.debug('Skipping result without image: %s', obj['Path'])
+                continue
+            try:
+                results[urimap[obj['Path']]] = [image]
+            except KeyError:
+                logger.warn('Unexpected dLeyna result path: %s', obj['Path'])
+            logger.debug('images results: %r', results)
+        return results
+
+    def lookup(self, uri):
+        parts = urisplit(uri)
+        dleyna = self.backend.dleyna
+        server = dleyna.server(parts.gethost()).get()
+        path = server['Path'] + parts.getpath()
+        props = dleyna.properties(path).get()
+        type = props['Type']
+
+        tracks = []
+        if type == 'container':
+            future = dleyna.search(path, LOOKUP_QUERY, filter=SEARCH_FILTER)
+            for obj in future.get():
+                track = _properties_to_track(server, obj)
+                if track:
+                    tracks.append(track)
+                else:
+                    logger.debug('Skipping dLeyna lookup result %r', obj)
+        elif type == 'music' or type == 'audio':
+            tracks.append(_properties_to_track(server, props))
+        else:
+            logger.warn('Invalid dLeyna type for %s: %s', uri, type)
+        return tracks
+
+    def refresh(self, uri=None):
+        logger.info('Refreshing dLeyna library')
+        self.backend.dleyna.rescan()
+
+    def search(self, query=None, uris=None, exact=False):
+        if query:
+            terms = []
+            mapping = QUERY_MAPPING[exact]
+            for key, values in query.items():
+                if key in mapping:
+                    terms.extend(map(mapping[key].format, map(_quote, values)))
+                else:
+                    return None  # no mapping
+            query = '(%s)' % ') and ('.join(terms)
+        else:
+            query = '*'
+        logger.debug('dLeyna search query: %s', query)
+
+        # TODO: refactor this (no future.map from reply_handler?)
+        futures = []
+        for uri in uris or [self.root_directory.uri]:
+            if uri == self.root_directory.uri:
+                for server in self.backend.dleyna.servers().get():
+                    uri = uricompose(SCHEME, host=server['UDN'])
+                    futures.append(self.__search(query, uri))
+            else:
+                futures.append(self.__search(query, uri))
+
+        results = collections.defaultdict(list)
+        for objs in pykka.get_all(futures):
+            for server, obj in objs:
+                model = _properties_to_model(server, obj)
+                if model:
+                    results[type(model)].append(model)
+                else:
+                    logger.debug('Skipping dLeyna search result %r', obj)
+        return SearchResult(
+            uri=uricompose(SCHEME, query=query),
+            albums=results[Album],
+            artists=results[Artist],
+            tracks=results[Track]
+        )
+
+    # TODO: refactor (move to client?), configurable chunk size
+    def __lookup(self, server, paths, filter=['*'], limit=10):
+        dleyna = self.backend.dleyna
+        futures = []
+        root = server['Path']
+        if 'Path' in server.get('SearchCaps', []):
+            for n in range(0, len(paths), limit):
+                chunk = paths[n:n+limit]
+                query = ' or '.join('Path = "%s"' % path for path in chunk)
+                futures.append(dleyna.search(root, query, 0, 0, filter))
+        else:
+            for path in paths:
+                # pykka.Future.map() doesn't work with Dictionary value
+                futures.append(_map(dleyna.properties(path), lambda x: [x]))
+        return futures
+
+    def __search(self, query, uri):
+        parts = urisplit(uri)
+        dleyna = self.backend.dleyna
+        server = dleyna.server(parts.gethost()).get()
+        path = server['Path'] + parts.getpath()
+        future = dleyna.search(path, query, filter=SEARCH_FILTER)
+        return future.map(lambda result: (server, result))
