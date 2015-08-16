@@ -1,0 +1,176 @@
+"""
+Responsible for pulling down data from AWS
+"""
+
+import socket
+from corenlp_xml.document import Document
+
+from boto import connect_s3
+from boto.s3.key import Key
+from lxml.etree import XMLSyntaxError
+from .. import RestfulResource
+from ..caching import cached_service_request
+
+
+S3_BUCKET = None
+
+
+def get_s3_bucket():
+    """
+    Accesses an S3 bucket for us, memoized
+
+    :return: s3 connection
+    :rtype: boto.s3.bucket.Bucket
+
+    """
+    global S3_BUCKET
+    if S3_BUCKET is None:
+        S3_BUCKET = connect_s3().get_bucket('nlp-data')
+    return S3_BUCKET
+
+
+def get_document_by_id(doc_id):
+    """
+    Accesses parsed XML from S3
+
+    :param doc_id: the document ID
+    :type doc_id: str
+
+    :return: A document object wrapping CoreNLP's XML
+    :rtype: corenlp_xml.document.Document
+
+    """
+
+    service_response = ParsedXmlService().get(doc_id)
+    document = None
+    if service_response.get('status') == 200:
+        try:
+            document = Document(service_response[doc_id])
+        except XMLSyntaxError:
+            document = Document('<xml/>')
+
+    return document
+
+
+class ParsedXmlService(RestfulResource):
+
+    """ Read-only service responsible for accessing XML from S3 """
+    def get(self, doc_id):
+        """ This allows abstraction away from S3 in case we ever move off of it
+
+        :param doc_id: the doc id
+        :type doc_id: str
+
+        :return: a JSON response
+        :rtype: dict
+
+        """
+        return self.get_from_s3(doc_id)
+
+    def get_from_s3(self, doc_id):
+        """ Returns a response with the XML of the parsed text
+
+        :param doc_id: the id of the document in Solr
+        :type doc_id: str
+
+        :return: json response
+        :rtype: dict
+
+        """
+        try:
+            bucket = get_s3_bucket()
+            key = Key(bucket)
+            key.key = 'xml/%s/%s.xml' % tuple(doc_id.split('_'))
+
+            if key.exists():
+                response = {'status': 200, doc_id: key.get_contents_as_string()}
+            else:
+                response = {'status': 500, 'message': 'Key does not exist'}
+            return response
+        except socket.error:
+            # probably need to refresh our connection
+            global S3_BUCKET
+            S3_BUCKET = None
+            return self.get_from_s3(doc_id)
+
+
+class ListDocIdsService(RestfulResource):
+
+    """ Service to expose resources in WikiDocumentIterator """
+    @cached_service_request
+    def get(self, wiki_id, start=0, limit=None):
+        """
+        Allows for iteration over groupings of documents
+
+        :param wiki_id: the ID of the wiki
+        :type wiki_id: str|int
+        :param start: the starting offset, default 0
+        :type start: int
+        :param limit: maximum number of documents (no limit by default)
+        :type limit: None|int
+
+        :return: a dict response with number of ids and an array of ids
+        :rtype: dict
+
+        """
+
+        wiki_id = str(wiki_id)
+        bucket = get_s3_bucket()
+        keys = bucket.get_all_keys(prefix='xml/%s/' % (str(wiki_id)), max_keys=1)
+        if len(keys) == 0:
+            return {'status': 500, 'message': 'Wiki not yet processed'}
+
+        if limit:
+            ids = ArticleDocIdIterator(wiki_id)[start:limit]
+        else:
+            ids = [doc_id for doc_id in ArticleDocIdIterator(wiki_id)[start:]]
+        return {wiki_id: ids, 'status': 200, 'numFound': len(ids)}
+
+
+class ArticleDocIdIterator:
+
+    """ Get all existing document IDs for a wiki -- not a service """
+
+    def __init__(self, wid):
+        """ Constructor method
+
+        :param wid: the wiki ID we want to iterate over
+        :type wid: str|int
+
+        """
+        bucket = get_s3_bucket()
+        self.wid = str(wid)
+        self.counter = 0
+
+        def id_from_key(x):
+            split = x.split('/')
+            return "%s_%s" % (split[-2], split[-1].replace('.xml', ''))
+        self.keys = [id_from_key(key.key)
+                     for key in bucket.list(prefix='xml/'+str(wid)+'/')
+                     if key.key.endswith('.xml')]
+
+    def __iter__(self):
+        """ Iterator method """
+        return self.next()
+
+    def __getitem__(self, index):
+        """ Allows array access
+
+        :param index: int value of index
+        :type index: int
+
+        :return: doc id
+        :rtype: str
+        """
+        return self.keys[index]
+
+    def next(self):
+        """ Get next article ID
+
+        :return: doc id
+        :rtype: str
+        """
+        if self.counter == len(self.keys):
+            raise StopIteration
+        self.counter += 1
+        return self.keys[self.counter-1]
