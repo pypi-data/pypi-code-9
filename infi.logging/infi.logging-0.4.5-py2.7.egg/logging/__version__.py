@@ -1,0 +1,10 @@
+__version__ = "0.4.5"
+__git_commiter_name__ = "Arnon Yaari"
+__git_commiter_email__ = "arnony@infinidat.com"
+__git_branch__ = '(HEAD detached at v0.4.5)'
+__git_remote_tracking_branch__ = '(No remote tracking)'
+__git_remote_url__ = '(Not remote tracking)'
+__git_head_hash__ = 'df04954aff68e88cb9dd4373291a2dfd83fd0cfe'
+__git_head_subject__ = 'configure logbook and logging redirection only in production instead of trying to guess'
+__git_head_message__ = ''
+__git_dirty_diff__ = ''
