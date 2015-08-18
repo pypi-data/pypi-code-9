@@ -1,0 +1,11 @@
+__version__ = "0.0.6"
+__git_commiter_name__ = "Tomer Galun"
+__git_commiter_email__ = "tomerg@infinidat.com"
+__git_branch__ = '(HEAD detached at v0.0.6)'
+__git_remote_tracking_branch__ = '(No remote tracking)'
+__git_remote_url__ = '(Not remote tracking)'
+__git_head_hash__ = '4c38ba07650637e64f1c4895d4d99044b43abceb'
+__git_head_subject__ = 'HOSTDEV-2137 add plugin to suppress requests warnings'
+__git_head_message__ = ''
+__git_dirty_diff__ = ''
+__git_commit_date__ = '2015-08-10 16:35:23'
