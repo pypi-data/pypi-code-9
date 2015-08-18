@@ -1,0 +1,10 @@
+__version__ = "0.1.12"
+__git_commiter_name__ = "Arnon Yaari"
+__git_commiter_email__ = "arnony@infinidat.com"
+__git_branch__ = '(HEAD detached at v0.1.12)'
+__git_remote_tracking_branch__ = '(No remote tracking)'
+__git_remote_url__ = '(Not remote tracking)'
+__git_head_hash__ = '58e3149285a2e39095c3f39bed797631742e4719'
+__git_head_subject__ = 'remove hack that is not needed any more'
+__git_head_message__ = ''
+__git_dirty_diff__ = ''
