@@ -1,0 +1,10 @@
+__version__ = "0.3.12"
+__git_commiter_name__ = "Guy Rozendorn"
+__git_commiter_email__ = "guy@rzn.co.il"
+__git_branch__ = 'develop'
+__git_remote_tracking_branch__ = 'origin/develop'
+__git_remote_url__ = 'git@git.infinidat.com:host-opensource/infi.traceback.git'
+__git_head_hash__ = 'd1857867602a5c28663e810d1df2c503148deef4'
+__git_head_subject__ = 'HOSTDEV-2201 not using mock anymore'
+__git_head_message__ = ''
+__git_dirty_diff__ = ''
