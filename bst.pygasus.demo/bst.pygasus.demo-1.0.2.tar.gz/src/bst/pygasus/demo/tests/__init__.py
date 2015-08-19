@@ -1,0 +1,1 @@
+from bst.pygasus.demo.tests.testing import test_suite
