@@ -1,0 +1,1 @@
+# this module implement the interface for platform reference
