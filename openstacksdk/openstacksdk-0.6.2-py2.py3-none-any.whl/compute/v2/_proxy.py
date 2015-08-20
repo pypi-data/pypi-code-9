@@ -1,0 +1,502 @@
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
+from openstack.compute.v2 import extension
+from openstack.compute.v2 import flavor
+from openstack.compute.v2 import image
+from openstack.compute.v2 import keypair
+from openstack.compute.v2 import limits
+from openstack.compute.v2 import server
+from openstack.compute.v2 import server_interface
+from openstack.compute.v2 import server_ip
+from openstack import proxy
+from openstack import resource
+
+
+class Proxy(proxy.BaseProxy):
+
+    def find_extension(self, name_or_id, ignore_missing=True):
+        """Find a single extension
+
+        :param name_or_id: The name or ID of an extension.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the resource does not exist.
+                    When set to ``True``, None will be returned when
+                    attempting to find a nonexistent resource.
+        :returns: One :class:`~openstack.compute.v2.extension.Extension` or
+                  None
+        """
+        return extension.Extension.find(self.session, name_or_id,
+                                        ignore_missing=ignore_missing)
+
+    def extensions(self, **query):
+        """Retrieve a generator of extensions
+
+        :param kwargs \*\*query: Optional query parameters to be sent to limit
+                                 the resources being returned.
+
+        :returns: A generator of extension instances.
+        :rtype: :class:`~openstack.compute.v2.extension.Extension`
+        """
+        return self._list(extension.Extension, paginated=False, **query)
+
+    def find_flavor(self, name_or_id, ignore_missing=True):
+        """Find a single flavor
+
+        :param name_or_id: The name or ID of a flavor.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the resource does not exist.
+                    When set to ``True``, None will be returned when
+                    attempting to find a nonexistent resource.
+        :returns: One :class:`~openstack.compute.v2.flavor.Flavor` or None
+        """
+        return flavor.Flavor.find(self.session, name_or_id,
+                                  ignore_missing=ignore_missing)
+
+    def create_flavor(self, **attrs):
+        """Create a new flavor from attributes
+
+        :param dict attrs: Keyword arguments which will be used to create
+                           a :class:`~openstack.compute.v2.flavor.Flavor`,
+                           comprised of the properties on the Flavor class.
+
+        :returns: The results of flavor creation
+        :rtype: :class:`~openstack.compute.v2.flavor.Flavor`
+        """
+        return self._create(flavor.Flavor, **attrs)
+
+    def delete_flavor(self, value, ignore_missing=True):
+        """Delete a flavor
+
+        :param value: The value can be either the ID of a flavor or a
+                      :class:`~openstack.compute.v2.flavor.Flavor` instance.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the flavor does not exist.
+                    When set to ``True``, no exception will be set when
+                    attempting to delete a nonexistent flavor.
+
+        :returns: ``None``
+        """
+        self._delete(flavor.Flavor, value, ignore_missing=ignore_missing)
+
+    def get_flavor(self, value):
+        """Get a single flavor
+
+        :param value: The value can be the ID of a flavor or a
+                      :class:`~openstack.compute.v2.flavor.Flavor` instance.
+
+        :returns: One :class:`~openstack.compute.v2.flavor.Flavor`
+        :raises: :class:`~openstack.exceptions.ResourceNotFound`
+                 when no resource can be found.
+        """
+        return self._get(flavor.Flavor, value)
+
+    def flavors(self, details=True, **query):
+        """Return a generator of flavors
+
+        :param bool details: When ``True``, returns
+            :class:`~openstack.compute.v2.flavor.FlavorDetail` objects,
+            otherwise :class:`~openstack.compute.v2.flavor.Flavor`.
+            *Default: ``True``*
+        :param kwargs \*\*query: Optional query parameters to be sent to limit
+                                 the flavors being returned.
+
+        :returns: A generator of flavor objects
+        """
+        flv = flavor.FlavorDetail if details else flavor.Flavor
+        return self._list(flv, paginated=True, **query)
+
+    def update_flavor(self, value, **attrs):
+        """Update a flavor
+
+        :param value: Either the id of a flavor or a
+                      :class:`~openstack.compute.v2.flavor.Flavor` instance.
+        :attrs kwargs: The attributes to update on the flavor represented
+                       by ``value``.
+
+        :returns: The updated flavor
+        :rtype: :class:`~openstack.compute.v2.flavor.Flavor`
+        """
+        return self._update(flavor.Flavor, value, **attrs)
+
+    def delete_image(self, value, ignore_missing=True):
+        """Delete an image
+
+        :param value: The value can be either the ID of an image or a
+                      :class:`~openstack.compute.v2.image.Image` instance.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the image does not exist.
+                    When set to ``True``, no exception will be set when
+                    attempting to delete a nonexistent image.
+
+        :returns: ``None``
+        """
+        self._delete(image.Image, value, ignore_missing=ignore_missing)
+
+    def find_image(self, name_or_id, ignore_missing=True):
+        """Find a single image
+
+        :param name_or_id: The name or ID of a image.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the resource does not exist.
+                    When set to ``True``, None will be returned when
+                    attempting to find a nonexistent resource.
+        :returns: One :class:`~openstack.compute.v2.image.Image` or None
+        """
+        return image.Image.find(self.session, name_or_id,
+                                ignore_missing=ignore_missing)
+
+    def get_image(self, value):
+        """Get a single image
+
+        :param value: The value can be the ID of an image or a
+                      :class:`~openstack.compute.v2.image.Image` instance.
+
+        :returns: One :class:`~openstack.compute.v2.image.Image`
+        :raises: :class:`~openstack.exceptions.ResourceNotFound`
+                 when no resource can be found.
+        """
+        return self._get(image.Image, value)
+
+    def images(self, details=True, **query):
+        """Return a generator of images
+
+        :param bool details: When ``True``, returns
+            :class:`~openstack.compute.v2.image.ImageDetail` objects,
+            otherwise :class:`~openstack.compute.v2.image.Image`.
+            *Default: ``True``*
+        :param kwargs \*\*query: Optional query parameters to be sent to limit
+                                 the resources being returned.
+
+        :returns: A generator of image objects
+        """
+        img = image.ImageDetail if details else image.Image
+        return self._list(img, paginated=True, **query)
+
+    def create_keypair(self, **attrs):
+        """Create a new keypair from attributes
+
+        :param dict attrs: Keyword arguments which will be used to create
+                           a :class:`~openstack.compute.v2.keypair.Keypair`,
+                           comprised of the properties on the Keypair class.
+
+        :returns: The results of keypair creation
+        :rtype: :class:`~openstack.compute.v2.keypair.Keypair`
+        """
+        return self._create(keypair.Keypair, **attrs)
+
+    def delete_keypair(self, value, ignore_missing=True):
+        """Delete a keypair
+
+        :param value: The value can be either the ID of a keypair or a
+                      :class:`~openstack.compute.v2.keypair.Keypair` instance.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the keypair does not exist.
+                    When set to ``True``, no exception will be set when
+                    attempting to delete a nonexistent keypair.
+
+        :returns: ``None``
+        """
+        self._delete(keypair.Keypair, value, ignore_missing=ignore_missing)
+
+    def get_keypair(self, value):
+        """Get a single keypair
+
+        :param value: The value can be the ID of a keypair or a
+                      :class:`~openstack.compute.v2.keypair.Keypair` instance.
+
+        :returns: One :class:`~openstack.compute.v2.keypair.Keypair`
+        :raises: :class:`~openstack.exceptions.ResourceNotFound`
+                 when no resource can be found.
+        """
+        return self._get(keypair.Keypair, value)
+
+    def find_keypair(self, name_or_id, ignore_missing=True):
+        """Find a single keypair
+
+        :param name_or_id: The name or ID of a keypair.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the resource does not exist.
+                    When set to ``True``, None will be returned when
+                    attempting to find a nonexistent resource.
+        :returns: One :class:`~openstack.compute.v2.keypair.Keypair` or None
+        """
+        return keypair.Keypair.find(self.session, name_or_id,
+                                    ignore_missing=ignore_missing)
+
+    def keypairs(self, **query):
+        """Return a generator of keypairs
+
+        :param kwargs \*\*query: Optional query parameters to be sent to limit
+                                 the resources being returned.
+
+        :returns: A generator of keypair objects
+        :rtype: :class:`~openstack.compute.v2.keypair.Keypair`
+        """
+        return self._list(keypair.Keypair, paginated=False, **query)
+
+    def update_keypair(self, value, **attrs):
+        """Update a keypair
+
+        :param value: Either the id of a keypair or a
+                      :class:`~openstack.compute.v2.keypair.Keypair` instance.
+        :attrs kwargs: The attributes to update on the keypair represented
+                       by ``value``.
+
+        :returns: The updated keypair
+        :rtype: :class:`~openstack.compute.v2.keypair.Keypair`
+        """
+        return self._update(keypair.Keypair, value, **attrs)
+
+    def get_limits(self):
+        """Retrieve limits that are applied to the project's account
+
+        :returns: A Limits object, including both
+                  :class:`~openstack.compute.v2.limits.AbsoluteLimits` and
+                  :class:`~openstack.compute.v2.limits.RateLimits`
+        :rtype: :class:`~openstack.compute.v2.limits.Limits`
+        """
+        return self._get(limits.Limits)
+
+    def create_server(self, **attrs):
+        """Create a new server from attributes
+
+        :param dict attrs: Keyword arguments which will be used to create
+                           a :class:`~openstack.compute.v2.server.Server`,
+                           comprised of the properties on the Server class.
+
+        :returns: The results of server creation
+        :rtype: :class:`~openstack.compute.v2.server.Server`
+        """
+        return self._create(server.Server, **attrs)
+
+    def delete_server(self, value, ignore_missing=True):
+        """Delete a server
+
+        :param value: The value can be either the ID of a server or a
+                      :class:`~openstack.compute.v2.server.Server` instance.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the server does not exist.
+                    When set to ``True``, no exception will be set when
+                    attempting to delete a nonexistent server.
+
+        :returns: ``None``
+        """
+        self._delete(server.Server, value, ignore_missing=ignore_missing)
+
+    def find_server(self, name_or_id, ignore_missing=True):
+        """Find a single server
+
+        :param name_or_id: The name or ID of a server.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the resource does not exist.
+                    When set to ``True``, None will be returned when
+                    attempting to find a nonexistent resource.
+        :returns: One :class:`~openstack.compute.v2.server.Server` or None
+        """
+        return server.Server.find(self.session, name_or_id,
+                                  ignore_missing=ignore_missing)
+
+    def get_server(self, value):
+        """Get a single server
+
+        :param value: The value can be the ID of a server or a
+                      :class:`~openstack.compute.v2.server.Server` instance.
+
+        :returns: One :class:`~openstack.compute.v2.server.Server`
+        :raises: :class:`~openstack.exceptions.ResourceNotFound`
+                 when no resource can be found.
+        """
+        return self._get(server.Server, value)
+
+    def servers(self, details=True, **query):
+        """Retrieve a generator of servers
+
+        :param bool details: When set to ``False``
+                    :class:`~openstack.compute.v2.server.Server` instances
+                    will be returned. The default, ``True``, will cause
+                    :class:`~openstack.compute.v2.server.ServerDetail`
+                    instances to be returned.
+        :param kwargs \*\*query: Optional query parameters to be sent to limit
+            the servers being returned.  Available parameters include:
+
+            * changes_since: A time/date stamp for when the server last changed
+                             status.
+            * image: An image resource or ID.
+            * flavor: A flavor resource or ID.
+            * name: Name of the server as a string.  Can be queried with
+                    regular expressions. The regular expression
+                    ?name=bob returns both bob and bobb.  If you must match on
+                    only bob, you can use a regular expression that
+                    matches the syntax of the underlying database server that
+                    is implemented for Compute, such as MySQL or PostgreSQL.
+            * status: Value of the status of the server so that you can filter
+                    on "ACTIVE" for example.
+            * host: Name of the host as a string.
+            * limit: Requests a specified page size of returned items from the
+                     query.  Returns a number of items up to the specified
+                     limit value. Use the limit parameter to make an initial
+                     limited request and use the ID of the last-seen item from
+                     the response as the marker parameter value in a subsequent
+                     limited request.
+            * marker: Specifies the ID of the last-seen item. Use the limit
+                      parameter to make an initial limited request and use the
+                      ID of the last-seen item from the response as the marker
+                      parameter value in a subsequent limited request.
+
+        :returns: A generator of server instances.
+        """
+        srv = server.ServerDetail if details else server.Server
+
+        # Server expects changes-since, but we use an underscore
+        # so it can be a proper Python name.
+        if "changes_since" in query:
+            query["changes-since"] = query.pop("changes_since")
+
+        return self._list(srv, paginated=True, **query)
+
+    def update_server(self, value, **attrs):
+        """Update a server
+
+        :param value: Either the id of a server or a
+                      :class:`~openstack.compute.v2.server.Server` instance.
+        :attrs kwargs: The attributes to update on the server represented
+                       by ``value``.
+
+        :returns: The updated server
+        :rtype: :class:`~openstack.compute.v2.server.Server`
+        """
+        return self._update(server.Server, value, **attrs)
+
+    def wait_for_server(self, value, status='ACTIVE', failures=['ERROR'],
+                        interval=2, wait=120):
+        return resource.wait_for_status(self.session, value, status,
+                                        failures, interval, wait)
+
+    def create_server_interface(self, **attrs):
+        """Create a new server interface from attributes
+
+        :param dict attrs: Keyword arguments which will be used to create
+            a :class:`~openstack.compute.v2.server_interface.ServerInterface`,
+            comprised of the properties on the ServerInterface class.
+
+        :returns: The results of server interface creation
+        :rtype: :class:`~openstack.compute.v2.server_interface.ServerInterface`
+        """
+        return self._create(server_interface.ServerInterface, **attrs)
+
+    def delete_server_interface(self, value, ignore_missing=True):
+        """Delete a server interface
+
+        :param value: The value can be either the ID of a server or a
+               :class:`~openstack.compute.v2.server_interface.ServerInterface`
+               instance.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the server interface does not exist.
+                    When set to ``True``, no exception will be set when
+                    attempting to delete a nonexistent server interface.
+
+        :returns: ``None``
+        """
+        self._delete(server_interface.ServerInterface, value,
+                     ignore_missing=ignore_missing)
+
+    def find_server_interface(self, name_or_id, ignore_missing=True):
+        """Find a single server interface
+
+        :param name_or_id: The name or ID of a server interface.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the resource does not exist.
+                    When set to ``True``, None will be returned when
+                    attempting to find a nonexistent resource.
+        :returns: One :class:`~openstack.compute.v2.server_interface.
+                  ServerInterface` or None
+        """
+        return server_interface.ServerInterface.find(
+            self.session, name_or_id, ignore_missing=ignore_missing)
+
+    def get_server_interface(self, value):
+        """Get a single server interface
+
+        :param value: The value can be the ID of a server interface or a
+               :class:`~openstack.compute.v2.server_interface.ServerInterface`
+               instance.
+
+        :returns: One
+            :class:`~openstack.compute.v2.server_interface.ServerInterface`
+        :raises: :class:`~openstack.exceptions.ResourceNotFound`
+                 when no resource can be found.
+        """
+        return self._get(server_interface.ServerInterface, value)
+
+    def server_interfaces(self, **query):
+        """Return a generator of server interfaces
+
+        :param kwargs \*\*query: Optional query parameters to be sent to limit
+                                 the resources being returned.
+
+        :returns: A generator of ServerInterface objects
+        :rtype: :class:`~openstack.compute.v2.server_interface.ServerInterface`
+        """
+        return self._list(server_interface.ServerInterface, paginated=False,
+                          **query)
+
+    def update_server_interface(self, value, **attrs):
+        """Update a server interface
+
+        :param value: Either the id of a server interface or a
+                      :class:
+                      `~openstack.compute.v2.server_interface.ServerInterface`
+                      instance.
+        :attrs kwargs: The attributes to update on the server interface
+                       represented by ``value``.
+
+        :returns: The updated server interface
+        :rtype: :class:`~openstack.compute.v2.server_interface.ServerInterface`
+        """
+        return self._update(server_interface.ServerInterface, value, **attrs)
+
+    def find_server_ip(self, name_or_id, ignore_missing=True):
+        """Find a single server IP
+
+        :param name_or_id: The name or ID of a server IP.
+        :param bool ignore_missing: When set to ``False``
+                    :class:`~openstack.exceptions.ResourceNotFound` will be
+                    raised when the resource does not exist.
+                    When set to ``True``, None will be returned when
+                    attempting to find a nonexistent resource.
+        :returns: One :class:`~openstack.compute.v2.server_ip.ServerIP` or None
+        """
+        return server_ip.ServerIP.find(self.session, name_or_id,
+                                       ignore_missing=ignore_missing)
+
+    def server_ips(self, **query):
+        """Return a generator of server IPs
+
+        :param kwargs \*\*query: Optional query parameters to be sent to limit
+                                 the resources being returned.
+
+        :returns: A generator of ServerIP objects
+        :rtype: :class:`~openstack.compute.v2.server_ip.ServerIP`
+        """
+        return self._list(server_ip.ServerIP, paginated=False, **query)
