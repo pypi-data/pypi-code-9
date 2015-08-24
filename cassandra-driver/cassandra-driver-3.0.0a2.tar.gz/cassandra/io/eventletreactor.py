@@ -1,0 +1,157 @@
+# Copyright 2014 Symantec Corporation
+# Copyright 2013-2015 DataStax, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Originally derived from MagnetoDB source:
+#   https://github.com/stackforge/magnetodb/blob/2015.1.0b1/magnetodb/common/cassandra/io/eventletreactor.py
+
+from collections import defaultdict
+from errno import EALREADY, EINPROGRESS, EWOULDBLOCK, EINVAL
+import eventlet
+from eventlet.green import select, socket
+from eventlet.queue import Queue
+from functools import partial
+import logging
+import os
+from six.moves import xrange
+from threading import Event
+
+from cassandra.connection import Connection, ConnectionShutdown
+from cassandra.protocol import RegisterMessage
+
+
+log = logging.getLogger(__name__)
+
+
+def is_timeout(err):
+    return (
+        err in (EINPROGRESS, EALREADY, EWOULDBLOCK) or
+        (err == EINVAL and os.name in ('nt', 'ce'))
+    )
+
+
+class EventletConnection(Connection):
+    """
+    An implementation of :class:`.Connection` that utilizes ``eventlet``.
+    """
+
+    _read_watcher = None
+    _write_watcher = None
+
+    _socket_impl = eventlet.green.socket
+    _ssl_impl = eventlet.green.ssl
+
+    @classmethod
+    def initialize_reactor(cls):
+        eventlet.monkey_patch()
+
+    def __init__(self, *args, **kwargs):
+        Connection.__init__(self, *args, **kwargs)
+
+        self.connected_event = Event()
+        self._write_queue = Queue()
+
+        self._callbacks = {}
+        self._push_watchers = defaultdict(set)
+
+        self._connect_socket()
+
+        self._read_watcher = eventlet.spawn(lambda: self.handle_read())
+        self._write_watcher = eventlet.spawn(lambda: self.handle_write())
+        self._send_options_message()
+
+    def close(self):
+        with self.lock:
+            if self.is_closed:
+                return
+            self.is_closed = True
+
+        log.debug("Closing connection (%s) to %s" % (id(self), self.host))
+
+        cur_gthread = eventlet.getcurrent()
+
+        if self._read_watcher and self._read_watcher != cur_gthread:
+            self._read_watcher.kill()
+        if self._write_watcher and self._write_watcher != cur_gthread:
+            self._write_watcher.kill()
+        if self._socket:
+            self._socket.close()
+        log.debug("Closed socket to %s" % (self.host,))
+
+        if not self.is_defunct:
+            self.error_all_callbacks(
+                ConnectionShutdown("Connection to %s was closed" % self.host))
+            # don't leave in-progress operations hanging
+            self.connected_event.set()
+
+    def handle_close(self):
+        log.debug("connection closed by server")
+        self.close()
+
+    def handle_write(self):
+        while True:
+            try:
+                next_msg = self._write_queue.get()
+                self._socket.sendall(next_msg)
+            except socket.error as err:
+                log.debug("Exception during socket send for %s: %s", self, err)
+                self.defunct(err)
+                return  # Leave the write loop
+
+    def handle_read(self):
+        run_select = partial(select.select, (self._socket,), (), ())
+        while True:
+            try:
+                run_select()
+            except Exception as exc:
+                if not self.is_closed:
+                    log.debug("Exception during read select() for %s: %s",
+                              self, exc)
+                    self.defunct(exc)
+                return
+
+            try:
+                buf = self._socket.recv(self.in_buffer_size)
+                self._iobuf.write(buf)
+            except socket.error as err:
+                if not is_timeout(err):
+                    log.debug("Exception during socket recv for %s: %s",
+                              self, err)
+                    self.defunct(err)
+                    return  # leave the read loop
+
+            if self._iobuf.tell():
+                self.process_io_buffer()
+            else:
+                log.debug("Connection %s closed by server", self)
+                self.close()
+                return
+
+    def push(self, data):
+        chunk_size = self.out_buffer_size
+        for i in xrange(0, len(data), chunk_size):
+            self._write_queue.put(data[i:i + chunk_size])
+
+    def register_watcher(self, event_type, callback, register_timeout=None):
+        self._push_watchers[event_type].add(callback)
+        self.wait_for_response(
+            RegisterMessage(event_list=[event_type]),
+            timeout=register_timeout)
+
+    def register_watchers(self, type_callback_dict, register_timeout=None):
+        for event_type, callback in type_callback_dict.items():
+            self._push_watchers[event_type].add(callback)
+        self.wait_for_response(
+            RegisterMessage(event_list=type_callback_dict.keys()),
+            timeout=register_timeout)
