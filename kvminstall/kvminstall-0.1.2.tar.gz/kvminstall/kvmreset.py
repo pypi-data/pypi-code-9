@@ -1,0 +1,27 @@
+#!/usr/bin/env python
+"""Python helper for resetting VMs installed with virt-install(1)"""
+
+import subprocess
+import os
+import platform
+import argparse
+import yaml
+import re
+import string
+import random
+import xml.etree.ElementTree as ET
+
+__author__ = 'Jason Callaway'
+__email__ = 'jason@jasoncallaway.com'
+__license__ = 'Apache License Version 2.0'
+__version__ = '0.1'
+__status__ = 'alpha'
+
+
+class KVMReset(object):
+    
+    def __init__(self, parsed_args):
+        pass
+
+if __name__ == "__main__":
+    KVMReset()
