@@ -1,0 +1,1 @@
+from aliyun.api.rest.rds.RdsDescribeDBInstanceClassesRequest import RdsDescribeDBInstanceClassesRequest

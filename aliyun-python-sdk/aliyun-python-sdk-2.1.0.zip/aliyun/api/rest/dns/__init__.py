@@ -1,0 +1,1 @@
+from aliyun.api.rest.dns.DnsAddBatchDomainRecordsRequest import DnsAddBatchDomainRecordsRequest

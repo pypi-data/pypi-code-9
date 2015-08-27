@@ -1,0 +1,1 @@
+from aliyun.api.rest.mkvstore.MkvstoreActivateInstanceRequest import MkvstoreActivateInstanceRequest
