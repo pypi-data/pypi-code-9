@@ -1,0 +1,5 @@
+"""PXP: Python eXPression languate
+
+PXP is a simple, python hosted expression language, intended to be used to calculate expressions
+in code in a safe environment.
+"""
