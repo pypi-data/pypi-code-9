@@ -1,0 +1,11 @@
+__version__ = "0.6.42.post3"
+__git_commiter_name__ = "Guy Rozendorn"
+__git_commiter_email__ = "guy@rzn.co.il"
+__git_branch__ = 'develop'
+__git_remote_tracking_branch__ = 'origin/develop'
+__git_remote_url__ = 'git@git.infinidat.com:host-opensource/infi.projector.git'
+__git_head_hash__ = '7764dedfeef11dca3acd30e94b262689abb6615a'
+__git_head_subject__ = 'TRIVIAL using git-recipe'
+__git_head_message__ = ''
+__git_dirty_diff__ = ''
+__git_commit_date__ = '2015-08-30 12:28:00'
