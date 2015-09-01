@@ -1,0 +1,22 @@
+# -*- coding: UTF-8 -*-
+logger.info("Loading 17 objects to table sepa_account...")
+# fields: id, partner, iban, bic, remark, primary
+loader.save(create_sepa_account(1,223,u'EE872200221012067904',u'HABAEE2X',u'',True))
+loader.save(create_sepa_account(2,224,u'EE732200221045112758',u'HABAEE2X',u'',True))
+loader.save(create_sepa_account(3,225,u'EE232200001180005555',u'HABAEE2X',u'Eraklilendile',True))
+loader.save(create_sepa_account(4,225,u'EE322200221112223334',u'HABAEE2X',u'\xc4rikliendile',False))
+loader.save(create_sepa_account(5,225,u'EE081010002059413005',u'EEUHEE2X',u'',False))
+loader.save(create_sepa_account(6,225,u'EE703300332099000006',u'FOREEE2X',u'',False))
+loader.save(create_sepa_account(7,225,u'EE431700017000115797',u'NDEAEE2X',u'',False))
+loader.save(create_sepa_account(8,226,u'EE382200221013987931',u'HABAEE2X',u'',True))
+loader.save(create_sepa_account(9,227,u'EE522200221013264447',u'HABAEE2X',u'',True))
+loader.save(create_sepa_account(10,228,u'EE202200221001178338',u'HABAEE2X',u'',True))
+loader.save(create_sepa_account(11,228,u'EE781010220002715011',u'',u'',False))
+loader.save(create_sepa_account(12,228,u'EE321700017000231134',u'',u'',False))
+loader.save(create_sepa_account(13,229,u'BE46000325448336',u'BPOTBEB1',u'',True))
+loader.save(create_sepa_account(14,229,u'BE81000325873924',u'BPOTBEB1',u'',False))
+loader.save(create_sepa_account(15,230,u'BE79827081803833',u'ETHIBEBB',u'',True))
+loader.save(create_sepa_account(16,231,u'BE98348031033293',u'BBRUBEBB',u'',True))
+loader.save(create_sepa_account(17,232,u'BE38248017357572',u'GEBABEBB',u'',True))
+
+loader.flush_deferred_objects()

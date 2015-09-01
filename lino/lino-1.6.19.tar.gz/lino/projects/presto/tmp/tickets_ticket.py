@@ -1,0 +1,21 @@
+# -*- coding: UTF-8 -*-
+logger.info("Loading 16 objects to table tickets_ticket...")
+# fields: id, modified, created, closed, private, planned_time, project, site, product, nickname, summary, description, ticket_type, duplicate_of, reported_for, fixed_for, assigned_to, reporter, state, waiting_for, deadline, priority, feedback, standby
+loader.save(create_tickets_ticket(1,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,1,1,3,u'',u'F\xf6\xf6 fails to bar when baz',u'',1,None,None,None,None,8,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(2,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,2,2,4,u'',u'Bar is not always baz',u'',2,None,None,None,8,7,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(3,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,None,3,1,u'',u'Baz sucks',u'',3,None,None,None,7,6,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(4,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,3,1,2,u'',u"Foo and bar don't baz",u'',1,None,None,None,None,5,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(5,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,None,2,3,u'',u'Cannot create Foo',u'<p>When I try to create\n    a <b>Foo</b>, then I get a <b>Bar</b> instead of a Foo.</p>',2,None,None,None,6,3,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(6,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,1,3,4,u'',u'Sell bar in baz',u'',3,None,None,None,5,2,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(7,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,2,1,1,u'',u'No Foo after deleting Bar',u'',1,None,None,None,None,1,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(8,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,3,2,2,u'',u'Is there any Bar in Foo?',u'',2,None,None,None,3,4,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(9,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,1,3,3,u'',u'Foo never matches Bar',u'',3,None,None,None,2,8,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(10,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,2,1,4,u'',u'Where can I find a Foo when bazing Bazes?',u'',1,None,None,None,None,7,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(11,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,3,2,1,u'',u'Class-based Foos and Bars?',u'',2,None,None,None,1,6,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(12,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,1,3,2,u'',u'Foo cannot bar',u'',3,None,None,None,4,5,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(13,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,2,1,3,u'',u'Bar cannot foo',u'',1,None,None,None,None,3,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(14,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,3,2,4,u'',u'Bar cannot baz',u'',2,None,None,None,8,2,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(15,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,1,3,1,u'',u'Bars have no foo',u'',3,None,None,None,7,1,u'10',u'',None,0,False,False))
+loader.save(create_tickets_ticket(16,dt(2015,9,1,23,6,5),dt(2015,9,1,23,6,5),False,True,None,2,1,2,u'',u'How to get bar from foo',u'',1,None,None,None,None,4,u'10',u'',None,0,False,False))
+
+loader.flush_deferred_objects()
