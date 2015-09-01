@@ -1,0 +1,12 @@
+# -*- coding: UTF-8 -*-
+# Copyright 2014-2015 Luc Saffre
+# License: BSD (see file COPYING for details)
+
+"""A series of polls used by intergration agents to interview their
+clients who start an "active job search" project ("recherche active
+d'emploi").
+
+"""
+
+raise Exception("Moved to std")
+

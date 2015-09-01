@@ -1,0 +1,19 @@
+# -*- coding: UTF-8 -*-
+# Copyright 2012-2015 Luc Saffre
+# License: BSD (see file COPYING for details)
+
+"""
+Loads all cbss specific default data.
+"""
+
+from lino_welfare.modlib.cbss.fixtures import sectors, purposes
+from lino_welfare.modlib.cbss.fixtures import cbss_demo, democfg
+from lino.modlib.statbel.countries.fixtures import inscodes
+
+
+def objects():
+    yield sectors.objects()
+    yield purposes.objects()
+    yield inscodes.objects()
+    yield democfg.objects()
+    yield cbss_demo.objects()
