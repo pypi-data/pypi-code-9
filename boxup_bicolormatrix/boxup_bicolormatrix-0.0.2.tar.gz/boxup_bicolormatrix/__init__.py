@@ -1,0 +1,2 @@
+from boxup_bicolormatrix import BicolorMatrixVisualization
+#import boxup_bicolormatrix
