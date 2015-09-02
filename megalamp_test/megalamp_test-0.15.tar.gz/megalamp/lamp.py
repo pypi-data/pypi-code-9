@@ -1,0 +1,91 @@
+# encoding=utf-8
+
+from loggers import logger
+from tornado import gen
+
+from painter import Painter
+from communicator import TLVCommunicator
+
+
+class LampCommunicator(TLVCommunicator):
+
+    type_len = 1
+    length_len = 2
+    big_endian_byte_order = True
+
+    def _decode_on(self, command, value):
+        return 'on', None
+
+    def _decode_off(self, command, value):
+        return 'off', None
+
+    def _decode_color(self, command, value):
+        return 'color', map(self.from_bytes, value[::-1])
+
+    data_decoders = {
+        '\x12': _decode_on,
+        '\x13': _decode_off,
+        '\x20': _decode_color,
+    }
+
+
+class Lamp(object):
+
+    communicator_type = LampCommunicator
+    painter_type = Painter
+
+    def __init__(self, host, port):
+        self.communicator = self.communicator_type(
+            host, port,
+        )
+        self.painter = self.painter_type()
+
+    @gen.coroutine
+    def start(self):
+        try:
+            yield self.do_start()
+        except Exception as e:
+            logger.exception(e.message)
+            raise
+
+    @gen.coroutine
+    def do_start(self):
+        yield self.communicator.connect()
+
+        self._running = True
+        while self._running:
+            yield self.execute_command()
+
+    def finish(self):
+        self.communicator.disconnect()
+        self.painter.destroy()
+
+    @gen.coroutine
+    def execute_command(self):
+
+        command, value = yield self.communicator.get_command()
+        logger.info('Got command: {}, {}'.format(
+            command, value,
+        ))
+        handler = self.command_to_handler(command)
+        if not handler:
+            logger.warning('Got unknown command: {}'.format(
+                command
+            ))
+            return
+
+        handler(value)
+
+    def command_to_handler(self, command):
+        return getattr(
+            self, 'cmd_{}'.format(command.lower()), None
+        )
+
+    def cmd_on(self, value=None):
+        self.painter.on()
+
+    def cmd_off(self, value=None):
+        self.painter.off()
+
+    def cmd_color(self, rgb):
+        self.painter.color(rgb)
