@@ -1,0 +1,144 @@
+#! /usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+.. module:: TODO
+   :platform: Unix
+   :synopsis: TODO.
+
+.. moduleauthor:: Aljosha Friemann <aljosha.friemann@gmail.com>
+
+"""
+
+import os, click, logging, coloredlogs
+
+from . import manager, utils, exceptions
+
+log = logging.getLogger(__name__)
+
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
+@click.group(short_help=__name__, context_settings=CONTEXT_SETTINGS)
+@click.option('-d', '--debug/--no-debug', default=False)
+@click.option('-v', '--verbose/--no-verbose', default=False)
+@click.option('-s', '--storage-dir', type=click.Path(),
+        help='where to store files')
+@click.option('-l', '--link-dir', type=click.Path(),
+        help='where to link stored files')
+@click.pass_context
+def cli(ctx, debug, verbose, storage_dir, link_dir):
+    if debug:
+        loglevel = logging.DEBUG
+    elif verbose:
+        loglevel = logging.INFO
+    else:
+        loglevel = logging.WARNING
+
+    coloredlogs.install(level=loglevel, show_timestamps=False,
+                                        show_hostname=False,
+                                        show_name=debug)
+
+    if storage_dir is None:
+        storage_dir = os.path.expanduser('~/.ltg')
+    if link_dir is None:
+        link_dir = os.path.expanduser('~/')
+
+    ctx.obj['manager'] = manager.Manager(storage_dir, link_dir)
+
+# store
+
+@cli.command(short_help='add a new files to storage')
+@click.argument('files', type=click.Path(exists=True), nargs=-1, required=False)
+@click.option('--relative-to', type=click.Path())
+@click.option('-c', '--category', default='general')
+@click.option('-f', '--force/--no-force', default=False)
+@click.pass_context
+def store(ctx, relative_to, category, force, files):
+    ctx.obj['manager'].store(files, relative_to, category, force)
+
+# link
+
+@cli.command(short_help='link stored files')
+@click.option('-f', '--force/--no-force', default=False)
+@click.pass_context
+def link(ctx, force):
+    ctx.obj['manager'].link(force)
+
+# add (store + link)
+
+@cli.command(short_help='add and link new files')
+@click.argument('files', type=click.Path(exists=True), nargs=-1, required=False)
+@click.option('--relative-to', type=click.Path())
+@click.option('-c', '--category', default='general')
+@click.option('-f', '--force/--no-force', default=False)
+@click.pass_context
+def add(ctx, files, relative_to, category, force):
+    ctx.obj['manager'].store(files, relative_to, category, force)
+    ctx.obj['manager'].link(True)
+
+# unlink
+
+@cli.command(short_help='unlink files or categories')
+@click.option('-c', '--category')
+@click.option('-r', '--recursive/--non-recursive', default=False)
+@click.argument('files', type=click.Path(), nargs=-1)
+@click.pass_context
+def unlink(ctx, files, category, recursive):
+    ctx.obj['manager'].unlink(files)
+
+# rm
+
+@cli.command(short_help='remove stored files or categories')
+@click.option('--keep-original/--remove-original', default=True)
+@click.option('--keep-link/--remove-link', default=False)
+@click.option('-r', '--recursive/--no-recursive', default=False)
+@click.option('-f', '--force/--no-force', default=False)
+@click.argument('files', type=click.Path(), nargs=-1)
+@click.pass_context
+def rm(ctx, keep_original, keep_link, recursive, force, files):
+    ctx.obj['manager'].remove(files, recursive, force)
+
+# mv
+
+@cli.command(short_help='move stored files')
+@click.option('-f', '--force/--no-force', default=False)
+@click.argument('src', type=click.Path(exists=True))
+@click.argument('dst', type=click.Path())
+@click.pass_context
+def mv(ctx, force, src, dst):
+    ctx.obj['manager'].move(src, dst, force)
+
+# git
+
+@cli.command(short_help='')
+@click.argument('args', nargs=-1)
+@click.pass_context
+def git(ctx, args):
+    ctx.obj['manager'].git(*args)
+
+# info
+
+@cli.command(short_help='')
+@click.pass_context
+def info(ctx):
+    print('storage: %s' % ctx.obj['manager'].storage_dir())
+    print('linker: %s' % ctx.obj['manager'].linker_dir())
+
+###############
+
+def exception_msg(exception):
+    return "%s: %s" % (exception.__class__.__name__, exception)
+
+def run():
+    try:
+        cli(obj={})
+    except (NotImplementedError, exceptions.LTGException) as e:
+        log.error(exception_msg(e))
+        exit(1)
+    except FileExistsError as e:
+        log.error("file exists, use --force to ovewrite: %s", e)
+        exit(1)
+    except Exception as e:
+        log.exception(e)
+        exit(1)
+
+# vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4 fenc=utf-8
