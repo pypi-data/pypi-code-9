@@ -1,0 +1,270 @@
+#     Copyright 2015, Kay Hayen, mailto:kay.hayen@gmail.com
+#
+#     Part of "Nuitka", an optimizing Python compiler that is compatible and
+#     integrates with CPython, but also works on its own.
+#
+#     Licensed under the Apache License, Version 2.0 (the "License");
+#     you may not use this file except in compliance with the License.
+#     You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing, software
+#     distributed under the License is distributed on an "AS IS" BASIS,
+#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#     See the License for the specific language governing permissions and
+#     limitations under the License.
+#
+""" Error codes
+
+These are the helper functions that will emit the error exit codes. They
+can abstractly check conditions or values directly. The release of statement
+temporaries from context is automatic.
+
+Also formatting errors is done here, avoiding PyErr_Format as much as
+possible.
+
+And releasing of values, as this is what the error case commonly does.
+
+"""
+
+from nuitka import Options
+from nuitka.PythonVersions import python_version
+
+from .ExceptionCodes import getExceptionIdentifier
+from .Indentation import getCommentCode, indented
+from .LineNumberCodes import getErrorLineNumberUpdateCode
+from .templates.CodeTemplatesExceptions import (
+    template_error_catch_exception,
+    template_error_catch_quick_exception,
+    template_error_format_string_exception
+)
+
+
+def getErrorExitReleaseCode(context):
+    temp_release = '\n'.join(
+        "Py_DECREF( %s );" % tmp_name
+        for tmp_name in
+        context.getCleanupTempnames()
+    )
+
+    keeper_variables = context.getExceptionKeeperVariables()
+
+    if keeper_variables[0] is not None:
+        temp_release += "\nPy_DECREF( %s );" % keeper_variables[0]
+        temp_release += "\nPy_XDECREF( %s );"  % keeper_variables[1]
+        temp_release += "\nPy_XDECREF( %s );"  % keeper_variables[2]
+
+    return temp_release
+
+
+def getErrorExitBoolCode(condition, emit, context, quick_exception = None):
+    assert not condition.endswith(';')
+
+    context.markAsNeedsExceptionVariables()
+
+    if quick_exception:
+        emit(
+            indented(
+                template_error_catch_quick_exception % {
+                    "condition"        : condition,
+                    "exception_exit"   : context.getExceptionEscape(),
+                    "quick_exception"  : getExceptionIdentifier(quick_exception),
+                    "release_temps"    : indented(
+                        getErrorExitReleaseCode(context)
+                    ),
+                    "line_number_code" : indented(
+                        getErrorLineNumberUpdateCode(context)
+                    )
+                },
+                0
+            )
+        )
+    else:
+        emit(
+            indented(
+                template_error_catch_exception % {
+                    "condition"        : condition,
+                    "exception_exit"   : context.getExceptionEscape(),
+                    "release_temps"    : indented(
+                        getErrorExitReleaseCode(context)
+                    ),
+                    "line_number_code" : indented(
+                        getErrorLineNumberUpdateCode(context)
+                    )
+                },
+                0
+            )
+        )
+
+
+def getErrorExitCode(check_name, emit, context, quick_exception = None):
+    getErrorExitBoolCode(
+        condition       = "%s == NULL" % check_name,
+        quick_exception = quick_exception,
+        emit            = emit,
+        context         = context
+    )
+
+
+def getErrorFormatExitBoolCode(condition, exception, args, emit, context):
+    assert not condition.endswith(';')
+
+    context.markAsNeedsExceptionVariables()
+
+    if len(args) == 1:
+        from .ConstantCodes import getModuleConstantCode
+
+        set_exception = [
+            "exception_type = %s;" % exception,
+            "Py_INCREF( exception_type );",
+            "exception_value = %s;" % getModuleConstantCode(
+                constant = args[0],
+            ),
+            "exception_tb = NULL;"
+        ]
+    else:
+        assert False, args
+
+
+    if python_version >= 300:
+        keeper_vars = context.getExceptionKeeperVariables()
+
+        if keeper_vars[0] is not None:
+            set_exception.append(
+                "ADD_EXCEPTION_CONTEXT( &%s, &%s );" % (
+                    keeper_vars[0],
+                    keeper_vars[1]
+                )
+            )
+        else:
+            set_exception.append(
+                "NORMALIZE_EXCEPTION( &exception_type, &exception_value, &exception_tb );"
+            )
+            set_exception.append(
+                "CHAIN_EXCEPTION( exception_type, exception_value );"
+            )
+
+    emit(
+        template_error_format_string_exception % {
+            "condition"        : condition,
+            "exception_exit"   : context.getExceptionEscape(),
+            "set_exception"    : indented(set_exception),
+            "release_temps"    : indented(
+                getErrorExitReleaseCode(context)
+            ),
+            "line_number_code" : indented(
+                getErrorLineNumberUpdateCode(context)
+            )
+        }
+    )
+
+def getErrorVariableDeclarations():
+    return (
+        "PyObject *exception_type = NULL, *exception_value = NULL;",
+        "PyTracebackObject *exception_tb = NULL;",
+        "NUITKA_MAY_BE_UNUSED int exception_lineno = -1;"
+    )
+
+def getExceptionKeeperVariableNames(keeper_index):
+    # For finally handlers of Python3, which have conditions on assign and
+    # use.
+    debug = Options.isDebug() and python_version >= 300
+
+    if debug:
+        keeper_obj_init = " = NULL"
+    else:
+        keeper_obj_init = ""
+
+    return (
+        "PyObject *exception_keeper_type_%d%s;" % (
+            keeper_index,
+            keeper_obj_init
+        ),
+        "PyObject *exception_keeper_value_%d%s;" % (
+            keeper_index,
+            keeper_obj_init
+        ),
+        "PyTracebackObject *exception_keeper_tb_%d%s;" % (
+            keeper_index,
+            keeper_obj_init
+        ),
+        "NUITKA_MAY_BE_UNUSED int exception_keeper_lineno_%d%s;" % (
+            keeper_index,
+            "= -1" if debug else ""
+        )
+    )
+
+
+def getExceptionPreserverVariableNames(preserver_id):
+    # For finally handlers of Python3, which have conditions on assign and
+    # use.
+    debug = Options.isDebug() and python_version >= 300
+
+    if debug:
+        preserver_obj_init = " = NULL"
+    else:
+        preserver_obj_init = ""
+
+    return (
+        "PyObject *exception_preserved_type_%d%s;" % (
+            preserver_id,
+            preserver_obj_init
+        ),
+        "PyObject *exception_preserved_value_%d%s;" % (
+            preserver_id,
+            preserver_obj_init
+        ),
+        "PyTracebackObject *exception_preserved_tb_%d%s;" % (
+            preserver_id,
+            preserver_obj_init
+        ),
+    )
+
+
+def getErrorFormatExitCode(check_name, exception, args, emit, context):
+    getErrorFormatExitBoolCode(
+        condition = "%s == NULL" % check_name,
+        exception = exception,
+        args      = args,
+        emit      = emit,
+        context   = context
+    )
+
+
+def getReleaseCode(release_name, emit, context):
+    assert release_name is None or len(release_name) > 2
+
+    if context.needsCleanup(release_name):
+        emit("Py_DECREF( %s );" % release_name)
+        context.removeCleanupTempName(release_name)
+
+
+def getReleaseCodes(release_names, emit, context):
+    for release_name in release_names:
+        getReleaseCode(
+            release_name = release_name,
+            emit         = emit,
+            context      = context
+        )
+
+
+def getMustNotGetHereCode(reason, context, emit):
+    getCommentCode(reason, emit)
+
+    provider = context.getOwner()
+
+    emit(
+        "NUITKA_CANNOT_GET_HERE( %(function_identifier)s );" % {
+            "function_identifier" :  provider.getCodeName()
+        }
+    )
+
+    if provider.isExpressionFunctionBody() and not provider.isGenerator():
+        emit("return NULL;")
+    elif provider.isPythonModule():
+        emit("PyErr_SetObject( PyExc_RuntimeError, Py_None );")
+        emit("return MOD_RETURN_VALUE( NULL );")
+    else:
+        emit("PyErr_SetObject( PyExc_RuntimeError, Py_None );")
+        emit("return;")
