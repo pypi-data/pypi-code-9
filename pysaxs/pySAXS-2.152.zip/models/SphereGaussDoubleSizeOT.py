@@ -1,0 +1,106 @@
+from model import Model
+from pySAXS.LS.LSsca import Qlogspace
+import numpy
+
+class SphereGaussDoubleSizeOT(Model):
+    '''
+    Spheres polydisperses distribution semi-Gaussienne analytique
+    by DC : 18/06/2009
+    adapted by OT 02/02/15
+    '''
+    
+    def SphereGauss_ana_DS_OT(self,q,par):
+        """
+        q array of q (A-1)
+        par[0] Mean radius(A) no 1
+        par[1] Mean radius(A) no 2
+        par[2] Gaussian standard deviation (A) no1
+        par[3] Gaussian standard deviation (A) no2
+        par[3] concentration of spheres (cm-3) no1
+        par[4] concentration of spheres (cm-3) no2
+        par[5] scattering length density of spheres (cm-2)
+        par[6] scattering length density of outside (cm-2)
+        
+        """
+        R = par[0]
+        R2=par[1]
+        s = par[2]
+        s2 = par[3]
+        n = par[4]
+        n2=par[5]
+        rho1 = par[6]
+        rho2 = par[7]
+        
+        t1 = q*R
+        t2 = q*s
+        prefactor1 = 1e-48*8.*numpy.pi**2.*n*(rho1-rho2)**2./q**6.
+        fcos = ((1+2.*t2**2.)**2.-t1**2.-t2**2.)*numpy.cos(2.*t1)
+        fsin = 2.*t1*(1.+2.*t2**2.)*numpy.sin(2.*t1)
+        f = 1.+t1**2.+t2**2.-numpy.exp(-2.*t2**2)*(fcos+fsin)
+        
+        prefactor2 = 1e-48*8.*numpy.pi**2.*n2*(rho1-rho2)**2./q**6.
+        t1 = q*R2
+        t2 = q*s2
+        fcos = ((1+2.*t2**2.)**2.-t1**2.-t2**2.)*numpy.cos(2.*t1)
+        fsin = 2.*t1*(1.+2.*t2**2.)*numpy.sin(2.*t1)
+        f2 = 1.+t1**2.+t2**2.-numpy.exp(-2.*t2**2)*(fcos+fsin)
+        
+        return prefactor1*f+prefactor2*f2
+    
+    '''
+    parameters definition
+    
+    Model(2,PolyGauss_ana_DC,Qlogspace(1e-4,1.,500.),
+    ([250.,10.,1.5e14,2e11,1e10]),
+    ("Mean (A)",
+    "Polydispersity ","number density","scattering length density of sphere (cm-2)",
+    "scattering length density of medium (cm-2)"),
+    ("%f","%f","%1.3e","%1.3e","%1.3e"),
+    (True,True,False,False,False)),
+    
+    
+    '''
+    IntensityFunc=SphereGauss_ana_DS_OT #function
+    N=0
+    q=Qlogspace(1e-4,1.,500.)      #q range(x scale)
+    Arg=[250.,150,10.,10,1.5e14,1.5e14,2e11,1e10]            #list of parameters
+    Format=["%f","%f","%f","%f","%1.3e","%1.3e","%1.3e","%1.3e"]      #list of c format
+    istofit=[True,True,True,True,True,True,False,False]    #list of boolean for fitting
+    name="Spheres polydisperses with two sizes: Semi-Gaussian distribution"          #name of the model
+    Doc=["Mean radius(A) for sphere 1",\
+         "Mean radius(A) for sphere 2",\
+         "Gaussian standard deviation 1(A) ",\
+         "Gaussian standard deviation 2(A) ",\
+         "concentration of spheres 1 (cm-3)",\
+         "concentration of spheres 2 (cm-3)",\
+         "scattering length density of sphere (cm-2)",\
+         "scattering length density of medium (cm-2)"] #list of description for parameters
+    Description="Spheres : Semi-Gaussian distribution, two sizes"  # description of model
+    Author="David Carriere, Olivier Tache"       #name of Author
+    WarningForCalculationTime=False
+    
+if __name__=="__main__":
+    '''
+    test code
+    '''
+    modl=SphereGaussDoubleSizeOT()
+    #plot the model
+    import Gnuplot
+    gp=Gnuplot.Gnuplot()
+    gp("set logscale xy")
+    c=Gnuplot.Data(modl.q,modl.getIntensity(),with_='points')
+    gp.plot(c)
+    raw_input("enter") 
+    #plot and fit the noisy model
+    yn=modl.getNoisy(0.8)
+    cn=Gnuplot.Data(modl.q,yn,with_='points')
+    res=modl.fit(yn) 
+    cf=Gnuplot.Data(modl.q,modl.IntensityFunc(modl.q,res),with_='lines')
+    gp.plot(c,cn,cf)
+    raw_input("enter")    
+    #plot and fit the noisy model with fitBounds
+    bounds=modl.getBoundsFromParam() #[250.0,2e11,1e10,1.5e15]
+    res2=modl.fitBounds(yn,bounds)
+    print res2
+    raw_input("enter")  
+    
