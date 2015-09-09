@@ -1,0 +1,11 @@
+__version__ = "0.4.30"
+__git_commiter_name__ = "Arnon Yaari"
+__git_commiter_email__ = "arnony@infinidat.com"
+__git_branch__ = '(HEAD detached at v0.4.30)'
+__git_remote_tracking_branch__ = '(No remote tracking)'
+__git_remote_url__ = '(Not remote tracking)'
+__git_head_hash__ = 'b098f074b7dd2e706d1f0bda98d83a141e84ae1b'
+__git_head_subject__ = 'HOSTDEV-2210 compare_pypi_repos: stop using PyPI XMLRPC API'
+__git_head_message__ = ''
+__git_dirty_diff__ = ''
+__git_commit_date__ = '2015-08-27 11:09:37'
