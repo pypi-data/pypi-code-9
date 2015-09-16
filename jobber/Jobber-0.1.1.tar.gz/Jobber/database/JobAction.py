@@ -1,0 +1,8 @@
+__author__ = 'rodak'
+
+NOTHING = 1
+FAIL = 2
+EXECUTE = 3
+CANCEL = 4
+FINISH_GROUP = 5
+IDLE_GROUP = 6
