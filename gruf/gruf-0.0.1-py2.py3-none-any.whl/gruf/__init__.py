@@ -1,0 +1,5 @@
+"""
+a stupid package that does nothing
+"""
+
+__version__ = '0.0.1'
