@@ -1,0 +1,3 @@
+class NoCardsRemaining(Exception):
+
+    pass
