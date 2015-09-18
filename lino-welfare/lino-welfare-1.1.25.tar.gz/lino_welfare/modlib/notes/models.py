@@ -1,0 +1,103 @@
+# -*- coding: UTF-8 -*-
+# Copyright 2013-2015 Luc Saffre
+# This file is part of Lino Welfare.
+#
+# Lino Welfare is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# Lino Welfare is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public
+# License along with Lino Welfare.  If not, see
+# <http://www.gnu.org/licenses/>.
+
+"""
+The `models` module for :mod:`lino_welfare.modlib.notes`.
+"""
+
+from __future__ import unicode_literals
+
+from django.utils.translation import ugettext_lazy as _
+
+from django.conf import settings
+
+from lino.api import dd, rt
+
+from lino.modlib.notes.models import *
+
+
+class Note(Note):
+    """Overrides the library model, setting an alternative verbose name,
+    adding a real database field :attr:`important` and the
+    :attr:`person` property.
+
+    .. attribute:: important
+
+        Checking this will cause this note to appear in the
+        :attr:`overview
+        <lino_welfare.modlib.pcsw.models.Client.overview>` panel of
+        the :attr:`person` linked to this note.
+
+    .. attribute:: person
+
+        An alias to :attr:`lino.modlib.notes.models.Note.project`.
+
+    """
+    class Meta:
+        verbose_name = _("Event/Note")
+        verbose_name_plural = _("Events/Notes")
+
+    important = models.BooleanField(_('Important'), default=False)
+
+    def get_person(self):
+        return self.project
+    Note.person = property(get_person)
+
+
+class NoteDetail(NoteDetail):
+
+    main = """
+    left:60 right:30
+    """
+
+    left = """
+    date:10 time event_type:25 type:25
+    project subject important
+    company contact_person #contact_role
+    user:10 language:8 build_time id
+    body
+    """
+
+    right = """
+    uploads.UploadsByController
+    outbox.MailsByController
+    # postings.PostingsByController
+    cal.TasksByController
+    """
+
+
+Notes.detail_layout = NoteDetail()
+Notes.insert_layout = """
+event_type:25 type:25
+subject
+project #company
+"""
+
+
+class NotesByProject(NotesByProject):
+    required_roles = dd.required()
+    column_names = ("date:8 time:5 event_type:10 type:10 "
+                    "subject:40 user:10 *")
+    auto_fit_column_widths = True
+
+
+class NotesByCompany(NotesByCompany):
+    required_roles = dd.required()
+    column_names = "date time project event_type type subject user *"
+
+
