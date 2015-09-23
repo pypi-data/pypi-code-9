@@ -1,0 +1,117 @@
+# coding: utf-8
+
+import functools
+
+from twisted.internet import defer, reactor, task
+from twisted.python import failure
+
+__all__ = [
+    'sleep',
+    'timeoutDeferred',
+    'withTimeout',
+    'withParallelLimit',
+    'TimeoutError',
+    'CloseableDeferredQueue',
+]
+
+
+class TimeoutError(defer.CancelledError):
+    pass
+
+
+def timeoutDeferred(d, timeout=120, clock=None):
+    assert isinstance(d, defer.Deferred)
+
+    if timeout is None:
+        return d
+
+    if clock is None:
+        clock = reactor
+
+    cancelled = [False]
+
+    def do_cancel():
+        if not d.called:
+            cancelled[0] = True
+            d.cancel()
+
+    def cancel_canceller(x):
+        if cancel_call.active():
+            cancel_call.cancel()
+        return x
+
+    def convert_ce_to_te(x):
+        if cancelled[0] and x.check(defer.CancelledError):
+            return failure.Failure(TimeoutError(x))
+        else:
+            return x
+
+    cancel_call = reactor.callLater(timeout, do_cancel)
+
+    return d.addBoth(cancel_canceller).addErrback(convert_ce_to_te)
+
+
+def withTimeout(timeout, clock=None):
+
+    if not timeout:
+        return lambda f: f
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            d = defer.maybeDeferred(fn, *args, **kwargs)
+            return timeoutDeferred(d, timeout, clock)
+        return wrapper
+    return decorator
+
+
+def withParallelLimit(limit):
+
+    if not limit:
+        return lambda f: f
+
+    def decorator(fn):
+        semaphore = defer.DeferredSemaphore(limit)
+
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            # use `deferLater` to avoid recursion overflow
+            return semaphore.run(task.deferLater, reactor, 0, fn, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def sleep(time):
+    return task.deferLater(reactor, time, int)
+
+
+class CloseableDeferredQueue(defer.DeferredQueue):
+
+    _closed = False
+
+    def close(self, why=None):
+
+        if self._closed:
+            raise Exception("queue already closed")
+        why = why or StopIteration()
+
+        while self.waiting:
+            self.waiting.pop(0).errback(why)
+
+        self._closed = why
+
+    def _ensure_open(self):
+        if self._closed:
+            raise self._closed
+
+    def put(self, x):
+        self._ensure_open()
+        return defer.DeferredQueue.put(self, x)
+
+    def get(self):
+        if self.pending:
+            return defer.succeed(self.pending.pop(0))
+        self._ensure_open()
+        return defer.DeferredQueue.get(self)
