@@ -1,0 +1,31 @@
+#
+# PySNMP MIB module NET-SNMP-MIB (http://pysnmp.sf.net)
+# ASN.1 source file:///usr/share/snmp/mibs/NET-SNMP-MIB.txt
+# Produced by pysmi-0.0.3 at Wed Jul  1 22:30:31 2015
+# On host cray platform Linux version 2.6.37.6-smp by user ilya
+# Using Python version 2.7.2 (default, Apr  2 2012, 20:32:47) 
+#
+( Integer, ObjectIdentifier, OctetString, ) = mibBuilder.importSymbols("ASN1", "Integer", "ObjectIdentifier", "OctetString")
+( NamedValues, ) = mibBuilder.importSymbols("ASN1-ENUMERATION", "NamedValues")
+( ConstraintsUnion, SingleValueConstraint, ConstraintsIntersection, ValueSizeConstraint, ValueRangeConstraint, ) = mibBuilder.importSymbols("ASN1-REFINEMENT", "ConstraintsUnion", "SingleValueConstraint", "ConstraintsIntersection", "ValueSizeConstraint", "ValueRangeConstraint")
+( NotificationGroup, ModuleCompliance, ) = mibBuilder.importSymbols("SNMPv2-CONF", "NotificationGroup", "ModuleCompliance")
+( Integer32, MibScalar, MibTable, MibTableRow, MibTableColumn, NotificationType, MibIdentifier, IpAddress, TimeTicks, Counter64, Unsigned32, enterprises, iso, Gauge32, ModuleIdentity, ObjectIdentity, Bits, Counter32, ) = mibBuilder.importSymbols("SNMPv2-SMI", "Integer32", "MibScalar", "MibTable", "MibTableRow", "MibTableColumn", "NotificationType", "MibIdentifier", "IpAddress", "TimeTicks", "Counter64", "Unsigned32", "enterprises", "iso", "Gauge32", "ModuleIdentity", "ObjectIdentity", "Bits", "Counter32")
+( DisplayString, TextualConvention, ) = mibBuilder.importSymbols("SNMPv2-TC", "DisplayString", "TextualConvention")
+netSnmp = ModuleIdentity((1, 3, 6, 1, 4, 1, 8072)).setRevisions(("2002-01-30 00:00",))
+if mibBuilder.loadTexts: netSnmp.setOrganization('www.net-snmp.org')
+if mibBuilder.loadTexts: netSnmp.setContactInfo('postal:   Wes Hardaker\n                    P.O. Box 382\n                    Davis CA  95617\n\n          email:    net-snmp-coders@lists.sourceforge.net')
+if mibBuilder.loadTexts: netSnmp.setDescription('Top-level infrastructure of the Net-SNMP project enterprise MIB tree')
+netSnmpObjects = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 1))
+netSnmpEnumerations = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 3))
+netSnmpModuleIDs = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 3, 1))
+netSnmpAgentOIDs = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 3, 2))
+netSnmpDomains = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 3, 3))
+netSnmpExperimental = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 9999))
+netSnmpPlaypen = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 9999, 9999))
+netSnmpNotificationPrefix = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 4))
+netSnmpNotifications = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 4, 0))
+netSnmpNotificationObjects = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 4, 1))
+netSnmpConformance = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 5))
+netSnmpCompliances = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 5, 1))
+netSnmpGroups = MibIdentifier((1, 3, 6, 1, 4, 1, 8072, 5, 2))
+mibBuilder.exportSymbols("NET-SNMP-MIB", netSnmp=netSnmp, netSnmpPlaypen=netSnmpPlaypen, netSnmpObjects=netSnmpObjects, netSnmpNotificationObjects=netSnmpNotificationObjects, PYSNMP_MODULE_ID=netSnmp, netSnmpNotificationPrefix=netSnmpNotificationPrefix, netSnmpGroups=netSnmpGroups, netSnmpEnumerations=netSnmpEnumerations, netSnmpDomains=netSnmpDomains, netSnmpModuleIDs=netSnmpModuleIDs, netSnmpConformance=netSnmpConformance, netSnmpNotifications=netSnmpNotifications, netSnmpExperimental=netSnmpExperimental, netSnmpCompliances=netSnmpCompliances, netSnmpAgentOIDs=netSnmpAgentOIDs)
