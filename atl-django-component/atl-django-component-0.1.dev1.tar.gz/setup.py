@@ -1,0 +1,35 @@
+from setuptools import setup
+from codecs import open
+from os import path
+
+here = path.abspath(path.dirname(__file__))
+
+with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
+    long_description = f.read()
+
+setup(
+    name='atl-django-component',
+    version='0.1.dev1',
+    description='An initiative to encapsulate components in django',
+    long_description=long_description,
+    url='https://pypi.python.org/pypi/atl-django-component',
+    author='Hailem Dreis Carrasco Fuentes',
+    author_email='hailem@atlantedigital.com',
+    license='GNU GPLv3',
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Developers',
+        'Framework :: Django',
+        'Environment :: Web Environment',
+        'Topic :: Utilities',
+        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+        'Programming Language :: Python',
+        'Operating System :: OS Independent',
+        'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
+        'Topic :: Software Development',
+        'Topic :: Software Development :: Libraries :: Application Frameworks',
+    ],
+    keywords='django component',
+    packages=['atl_django_component'],
+    package_dir = {'atl_django_component':'atl_django_component'},
+)
