@@ -1,0 +1,11 @@
+__version__ = "0.2.4"
+__git_commiter_name__ = "Oded Badt"
+__git_commiter_email__ = "obadt@infinidat.com"
+__git_branch__ = '(HEAD detached at v0.2.4)'
+__git_remote_tracking_branch__ = '(No remote tracking)'
+__git_remote_url__ = '(Not remote tracking)'
+__git_head_hash__ = '9db18b117c3f496379a80307cb2c3437812b1b3c'
+__git_head_subject__ = 'Added reservations'
+__git_head_message__ = ''
+__git_dirty_diff__ = ''
+__git_commit_date__ = '2015-09-29 16:12:23'
