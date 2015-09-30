@@ -1,0 +1,11 @@
+__version__ = "1.0"
+__git_commiter_name__ = "Guy Rozendorn"
+__git_commiter_email__ = "guy@rzn.co.il"
+__git_branch__ = 'develop'
+__git_remote_tracking_branch__ = 'origin/develop'
+__git_remote_url__ = 'git@git.infinidat.com:host-opensource/infi.rdc.git'
+__git_head_hash__ = '5aaa2c7fe2754e5df997c0a1826ea4105fc7b5e9'
+__git_head_subject__ = 'Finished release v1.0.'
+__git_head_message__ = '* release/v1.0:\n  command-line changes\n  initial version\n  added all project files'
+__git_dirty_diff__ = ''
+__git_commit_date__ = '2015-09-30 14:36:45'
