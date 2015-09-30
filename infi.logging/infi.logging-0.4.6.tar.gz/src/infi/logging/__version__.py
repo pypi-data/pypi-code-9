@@ -1,0 +1,10 @@
+__version__ = "0.4.6"
+__git_commiter_name__ = "Guy Rozendorn"
+__git_commiter_email__ = "guy@rzn.co.il"
+__git_branch__ = '(HEAD detached at v0.4.6)'
+__git_remote_tracking_branch__ = '(No remote tracking)'
+__git_remote_url__ = '(Not remote tracking)'
+__git_head_hash__ = '718f33ec5e381f12cb3477feb7ceb7060f6313fe'
+__git_head_subject__ = 'TRIVIAL NullHandler no longer accepts the bubble kwarg'
+__git_head_message__ = ''
+__git_dirty_diff__ = ''
