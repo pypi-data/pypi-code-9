@@ -1,0 +1,3 @@
+API_LIMIT_PER_PAGE = 0   # no limit
+
+QUIZ_REPEATS = 3
