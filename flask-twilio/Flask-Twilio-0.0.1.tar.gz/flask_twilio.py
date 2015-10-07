@@ -1,0 +1,222 @@
+__version__ = '0.0.1'
+__all__ = ('Response', 'Twilio')
+
+from base64 import urlsafe_b64encode
+from functools import wraps
+from os import urandom
+from six.moves.urllib.parse import urlsplit, urlunsplit
+from twilio.rest import TwilioRestClient
+from twilio.util import RequestValidator
+from twilio.twiml import Response as TwimlResponse
+from flask import Response as FlaskResponse
+from flask import abort, current_app, make_response, request, url_for
+from itsdangerous import TimestampSigner
+
+
+# Find the stack on which we want to store the database connection.
+# Starting with Flask 0.9, the _app_ctx_stack is the correct one,
+# before that we need to use the _request_ctx_stack.
+try:
+    from flask import _app_ctx_stack as stack
+except ImportError:
+    from flask import _request_ctx_stack as stack
+
+
+class Response(FlaskResponse, TwimlResponse):
+    """
+    A response class for constructing TwiML documents, providing all of
+    the verbs that are available through :py:class:`twilio.twiml.Response`.
+    See also https://www.twilio.com/docs/api/twiml.
+    """
+
+    def __init__(self, *args, **kwargs):
+        TwimlResponse.__init__(self)
+        FlaskResponse.__init__(self, *args, **kwargs)
+
+    @property
+    def response(self):
+        return [self.toxml()]
+
+    @response.setter
+    def response(self, value):
+        pass
+
+
+class Twilio(object):
+    """This class is used to control Twilio calls."""
+
+    def __init__(self, app=None):
+        self.app = app
+        if app is not None:
+            self.init_app(app)
+
+    def init_app(self, app):
+        """Factory method."""
+        # Use the newstyle teardown_appcontext if it's available,
+        # otherwise fall back to the request context
+        if hasattr(app, 'teardown_appcontext'):
+            app.teardown_appcontext(self.teardown)
+        else:
+            app.teardown_request(self.teardown)
+
+    def teardown(self, exception):
+        ctx = stack.top
+        if hasattr(ctx, 'twilio_client'):
+            del ctx.twilio_client
+        if hasattr(ctx, 'twilio_validator'):
+            del ctx.twilio_validator
+        if hasattr(ctx, 'twilio_signer'):
+            del ctx.twilio_signer
+
+    @property
+    def client(self):
+        """
+        An application-specific intance of
+        :py:class:`twilio.rest.TwilioRestClient`. Primarily for internal use.
+        """
+        ctx = stack.top
+        if ctx is not None:
+            if not hasattr(ctx, 'twilio_client'):
+                ctx.twilio_client = TwilioRestClient(
+                    current_app.config['TWILIO_ACCOUNT_SID'],
+                    current_app.config['TWILIO_AUTH_TOKEN'])
+            return ctx.twilio_client
+
+    @property
+    def validator(self):
+        """
+        An application-specific instance of
+        :py:class:`twilio.util.RequestValidator`. Primarily for internal use.
+        """
+        ctx = stack.top
+        if ctx is not None:
+            if not hasattr(ctx, 'twilio_validator'):
+                ctx.twilio_validator = RequestValidator(
+                    current_app.config['TWILIO_AUTH_TOKEN'])
+            return ctx.twilio_validator
+
+    @property
+    def signer(self):
+        """
+        An application-specific instance of
+        :py:class:`itsdangerous.TimestampSigner`, or ``None`` if no secret key
+        is set. Primarily for internal use.
+        """
+        ctx = stack.top
+        if ctx is not None:
+            if not hasattr(ctx, 'twilio_signer'):
+                if current_app.secret_key is not None:
+                    ctx.twilio_signer = TimestampSigner(
+                        current_app.secret_key, 'twilio')
+                else:
+                    ctx.twilio_signer = None
+            return ctx.twilio_signer
+
+    def twiml(self, view_func):
+        """Decorator for marking view that will create TwiML documents."""
+        @wraps(view_func)
+        def wrapper(*args, **kwargs):
+            # If we are not in testing mode, then enforce rudimentary security.
+            if not current_app.testing:
+                # Perform HTTP Basic authentication if a secret key is set.
+                #
+                # The username must be `twilio`, and the password must be a
+                # validly signed string that was generated less than 10 minutes
+                # ago. This guarantees that the Twilio call was initiated by
+                # this application, rather than a malicious agent.
+                #
+                # Note that if we are using HTTP, then a malicious agent can
+                # still snoop on the data that we are sending to and from
+                # Twilio, and can also spoof our reply to Twilio. Both issues
+                # would be addressed by using HTTPS.
+                if self.signer is not None:
+                    auth = request.authorization
+                    authorized = (
+                        auth and
+                        auth.username == 'twilio' and
+                        self.signer.validate(auth.password, max_age=600))
+                    if not authorized:
+                        # If authorization failed, then issue a challenge.
+                        return 'Unauthorized', 401, {'WWW-Authenticate':
+                            'Basic realm="Login Required"'}
+                # Validate the Twilio request. This guarantees that the request
+                # came from Twilio, rather than some other malicious agent.
+                valid = self.validator.validate(
+                    request.url,
+                    request.form,
+                    request.headers.get('X-Twilio-Signature', ''))
+                if not valid:
+                    # If the request was spoofed, then send '403 Forbidden'.
+                    abort(403)
+            # Call the view itself.
+            rv = view_func(*args, **kwargs)
+            # Adjust MIME type and return.
+            resp = make_response(rv)
+            resp.mimetype = 'text/xml'
+            return resp
+        # Only accept the POST method.
+        wrapper.methods = ('POST',)
+        # Done!
+        return wrapper
+
+    def call_for(self, endpoint, to, **values):
+        """
+        Initiate a Twilio call.
+
+        Parameters
+        ----------
+        endpoint : `str`
+            The view endpoint, as would be passed to :py:func:`flask.url_for`.
+        to : `str`
+            The destination phone number.
+        values : `dict`
+            Additional keyword arguments to pass to :py:func:`flask.url_for`.
+
+        Returns
+        -------
+        call : `twilio.rest.resources.Call`
+            An object representing the call in progress.
+        """
+        # Extract keyword arguments that are intended for `calls.create`
+        # instead of `url_for`.
+        values = dict(values, _external=True)
+        from_ = values.pop('from_', None) or current_app.config['TWILIO_FROM']
+
+        # Construct URL for endpoint.
+        url = url_for(endpoint, **values)
+
+        # If we are not in testing mode and a secret key is set, then add HTTP
+        # basic auth information to the URL. The username is `twilio`. The
+        # password is a random string that has been signed with `itsdangerous`.
+        if not current_app.testing and self.signer is not None:
+            urlparts = list(urlsplit(url))
+            password = self.signer.sign(urlsafe_b64encode(urandom(24))).decode()
+            urlparts[1] = 'twilio:' + password + '@' + urlparts[1]
+            url = urlunsplit(urlparts)
+
+        # Issue phone call.
+        return self.client.calls.create(to, from_, url)
+
+    def message(self, body, to, **values):
+        """
+        Send an SMS message with Twilio.
+
+        Parameters
+        ----------
+        body : `str`
+            The body of the text message.
+        to : `str`
+            The destination phone number.
+        values : `dict`
+            Additional keyword arguments to pass to
+            :py:meth:`twilio.rest.resources.SmsMessages.create`.
+
+        Returns
+        -------
+        message : :py:class:`twilio.rest.resources.SmsMessage`
+            An object representing the message that was sent.
+        """
+        values = dict(values)
+        from_ = values.pop('from_', None) or current_app.config['TWILIO_FROM']
+        return self.client.messages.create(
+            body=body, to=to, from_=from_, **values)
