@@ -1,0 +1,273 @@
+#! -*- coding: utf-8 -*-
+
+import os
+from glob import glob
+import shutil
+import psutil
+from datetime import datetime
+import json
+
+from brome.core.model.test_batch import TestBatch
+from brome.core.model.test_instance import TestInstance
+from brome.core.model.test_result import TestResult
+from brome.core.model.test import Test
+from brome.webserver.extensions import db
+
+def get_test_batch_list():
+    data = db.session.query(TestBatch).order_by(TestBatch.id.desc()).all()
+
+    return data
+
+def get_active_test_instance(app, testbatch_id):
+    test_instances = db.session.query(TestInstance)\
+                            .filter(TestInstance.test_batch_id == testbatch_id)\
+                            .filter(TestInstance.ending_timestamp == None)\
+                            .all()
+
+    for test_instance in test_instances:
+        extra_data = json.loads(test_instance.extra_data)
+        if extra_data.has_key('instance_public_ip'):
+            test_instance.public_ip = extra_data['instance_public_ip']
+        else:
+            test_instance.public_ip = False
+
+    return test_instances
+
+def get_total_execution_time(app, testbatch_id):
+    test_batch = get_test_batch(testbatch_id)
+
+    if test_batch.ending_timestamp:
+        total_execution_time = test_batch.ending_timestamp - test_batch.starting_timestamp
+    else:
+        total_execution_time = 'still running...'
+
+    return total_execution_time
+
+def get_test_batch_result_dir(app, testbatch_id):
+    return os.path.join(
+        app.brome.get_config_value("project:test_batch_result_path"),
+        'tb_%s'%testbatch_id
+    )
+
+def delete_test_batch(app, testbatch_id):
+    test_batch = get_test_batch(testbatch_id)
+
+    db.session.delete(test_batch)
+    db.session.commit()
+
+    shutil.rmtree(get_test_batch_result_dir(app, testbatch_id))
+
+def stop_test_batch(app, testbatch_id):
+    test_batch = get_test_batch(testbatch_id)
+
+    test_batch.killed = True
+    ret = psutil.pid_exists(test_batch.pid)
+    if not ret and test_batch.ending_timestamp is None:
+        test_batch.ending_timestamp = datetime.now()
+
+    db.session.commit()
+
+def get_test_batch(testbatch_id):
+    data = db.session.query(TestBatch).filter(TestBatch.id == testbatch_id).one()
+
+    return data
+
+def get_test_batch_detail(app, testbatch_id):
+    data = db.session.query(TestBatch).filter(TestBatch.id == testbatch_id).one()
+
+    data.total_crashes = get_total_crashes(app, testbatch_id)
+    data.total_executing_tests = get_total_executing_tests(testbatch_id)
+    data.total_finished_tests = get_total_finished_tests(testbatch_id)
+    data.total_tests = get_total_tests(testbatch_id)
+    data.total_screenshots = get_test_batch_screenshot(app, testbatch_id, only_total = True)
+    data.total_test_results = get_test_batch_test_result(app, testbatch_id, only_total = True)
+    data.total_failed_tests = get_test_batch_test_result(app, testbatch_id, only_failed_total = True)
+    data.total_execution_time = get_total_execution_time(app, testbatch_id)
+
+    return data
+
+def get_total_tests(testbatch_id):
+    return get_test_batch(testbatch_id).total_tests
+
+def get_total_crashes(app, testbatch_id):
+    relative_logs_dir = os.path.join(
+        "tb_%s"%testbatch_id,
+        "crashes"
+    )
+
+    abs_logs_dir = os.path.join(
+        app.brome.get_config_value('project:test_batch_result_path'),
+        relative_logs_dir
+    )
+
+    return len(glob(os.path.join(abs_logs_dir, '*.log')))
+
+def get_total_finished_tests(testbatch_id):
+    count = db.session.query(TestInstance)\
+        .filter(TestInstance.test_batch_id == testbatch_id)\
+        .filter(TestInstance.ending_timestamp != None)\
+        .count()
+
+    return count
+
+def get_total_executing_tests(testbatch_id):
+    count = db.session.query(TestInstance)\
+        .filter(TestInstance.test_batch_id == testbatch_id)\
+        .filter(TestInstance.ending_timestamp == None)\
+        .count()
+
+    return count
+
+def get_test_list(app):
+    data = []
+
+    tests_dir = os.path.join(
+        app.brome.get_config_value('project:absolute_path'),
+        "tests"
+    )
+
+    if os.path.isdir(tests_dir):
+        tests = glob(os.path.join(tests_dir, 'test_*.py'))
+        for test in sorted(tests):
+            name = test.split(os.sep)[-1][len('test_'):-3]
+            data.append({'name': name})
+
+    return data
+
+def get_browser_list(app):
+    data = []
+
+    for key, browser in app.brome.browsers_config.iteritems():
+        if browser.get('available_in_webserver', False):
+            browser_config = {}
+            browser_config['id'] = key
+            browser_config['name'] = browser['browserName']
+
+            icon = "fa-%s"%browser_config['name'].lower().replace(' ', '-')
+            if browser_config.has_key('deviceName'):
+                if 'android' in browser_config['deviceName'].lower():
+                    icon = "fa-android"
+                elif 'iphone' in browser_config['deviceName'].lower():
+                    icon = "fa-mobile"
+                elif 'ipad' in browser_config['deviceName'].lower():
+                    icon = "fa-tablet"
+
+            browser_config['icon'] = icon
+
+            data.append(browser_config)
+
+    return data
+
+def get_test_batch_screenshot(app, testbatch_id, only_total = False):
+    data = []
+
+    relative_dir = os.path.join(
+        "tb_%s"%testbatch_id,
+        "screenshots"
+    )
+
+    abs_dir = os.path.join(
+        app.brome.get_config_value('project:test_batch_result_path'),
+        relative_dir
+    )
+
+    if os.path.isdir(abs_dir):
+        for browser_dir in os.listdir(abs_dir):
+            screenshot_list = os.listdir(os.path.join(abs_dir, browser_dir))
+
+            for screenshot in screenshot_list:
+                data.append({
+                    'title': screenshot.split('.')[0].replace('_', ' '),
+                    'browser_id': browser_dir.replace('_', ' '),
+                    'path': os.path.join(relative_dir, browser_dir, screenshot)
+                })
+
+    if only_total:
+        return len(data)
+
+    return data
+
+def get_test_batch_test_result(app, testbatch_id, only_total = False, only_failed_total = False):
+    query_ = db.session.query(TestResult)\
+                .filter(TestResult.test_batch_id == testbatch_id)
+
+    if only_total:
+        return query_.count()
+    elif only_failed_total:
+        return query_.filter(TestResult.result == False).count()
+    else:
+        query_ = query_.join(Test, TestResult.test_id == Test.id)
+        return query_.order_by(TestResult.result, Test.test_id).all()
+
+def get_test_batch_log(app, testbatch_id):
+    abs_logs_dir = os.path.join(
+        app.brome.get_config_value('project:test_batch_result_path'),
+        "tb_%s"%testbatch_id
+    )
+
+    runner_log = []
+    with open(os.path.join(abs_logs_dir, "brome_runner.log"), 'r') as f:
+        runner_log = f.read().replace('"', '&quot;').replace("'", '&quot;').splitlines()
+
+    return runner_log
+
+def get_test_batch_test_instance_log(app, testbatch_id, index):
+    data = []
+
+    relative_logs_dir = os.path.join(
+        "tb_%s"%testbatch_id,
+        "logs"
+    )
+
+    abs_logs_dir = os.path.join(
+        app.brome.get_config_value('project:test_batch_result_path'),
+        relative_logs_dir
+    )
+
+    def ls_(dir_):
+        """
+        ctime = lambda f: os.stat(os.path.join(dir_, f)).st_ctime
+        return [f for f in sorted(os.listdir(dir_), key=ctime)]
+        """
+        return [f for f in os.listdir(dir_)]
+
+    if os.path.isdir(abs_logs_dir):
+        for log in ls_(abs_logs_dir):
+            data.append({
+                'name': log,
+                'path': os.path.join(relative_logs_dir, log)
+            })
+
+    return data[index:]
+
+def get_test_batch_crashes(app, testbatch_id):
+    data = []
+
+    relative_dir = os.path.join(
+        "tb_%s"%testbatch_id,
+        "crashes"
+    )
+
+    abs_logs_dir = os.path.join(
+        app.brome.get_config_value('project:test_batch_result_path'),
+        relative_dir
+    )
+
+    if os.path.isdir(abs_logs_dir):
+        crash_log_list = glob(os.path.join(abs_logs_dir, '*.log'))
+
+        for log in crash_log_list:
+            log_name = log.split(os.sep)[-1]
+            file_name = ''.join(log_name.split('.')[:-1])
+
+            with open(os.path.join(abs_logs_dir, log), 'r') as f:
+                trace = f.read()
+                trace = trace.split(os.linesep)
+
+            data.append({
+                'name': file_name.replace('_', ' ').title(),
+                'screenshot': os.path.join(relative_dir, '%s.png'%file_name),
+                'trace': trace
+            })
+
+    return data
