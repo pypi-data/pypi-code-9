@@ -1,0 +1,22 @@
+from setuptools import setup
+
+
+setup(
+    name='wasabi.geom',
+    version='0.1.3',
+    description="2D vector, line and polygon classes, and a spatial hash implementation",
+    long_description=open('README.rst').read(),
+    author='Daniel Pope',
+    author_email='mauve@mauveweb.co.uk',
+    url='https://bitbucket.org/lordmauve/wasabi-geom',
+    packages=['wasabi', 'wasabi.geom'],
+    namespace_packages=['wasabi'],
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'License :: OSI Approved :: BSD License',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 3',
+        'Operating System :: OS Independent',
+        'Topic :: Software Development :: Libraries :: Python Modules'
+    ]
+)
