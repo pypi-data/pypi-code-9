@@ -1,0 +1,14 @@
+
+SKT = 'SKT'
+KTF = 'KTF'
+LGT = 'LGT'
+SKM = 'SKM'
+KTM = 'KTM'
+LGM = 'LGM'
+
+TELECOMS = [SKT, KTF, LGT, SKM, KTM, LGM]
+
+MALE = 'M'
+FEMALE = 'F'
+YES = 'Y'
+NO = 'N'
