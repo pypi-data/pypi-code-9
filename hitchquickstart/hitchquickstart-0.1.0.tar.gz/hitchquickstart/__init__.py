@@ -1,0 +1,1 @@
+from hitchquickstart import commandline
