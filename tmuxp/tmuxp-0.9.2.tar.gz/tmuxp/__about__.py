@@ -1,0 +1,8 @@
+__title__ = 'tmuxp'
+__package_name__ = 'tmuxp'
+__version__ = '0.9.2'
+__description__ = 'Save and load tmux sessions thru JSON, YAML configs. Control tmux through Python objects.'
+__email__ = 'tony@git-pull.com'
+__author__ = 'Tony Narlock'
+__license__ = 'BSD'
+__copyright__ = 'Copyright 2013 Tony Narlock'
