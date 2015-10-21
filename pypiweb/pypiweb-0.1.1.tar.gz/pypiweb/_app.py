@@ -1,0 +1,448 @@
+import sys
+import os
+import io
+import itertools
+import zipfile
+import mimetypes
+import logging
+import pkg_resources
+
+try:
+    from io import BytesIO
+except ImportError:
+    from StringIO import StringIO as BytesIO
+
+try:  # PY3
+    from urllib.parse import urljoin
+except ImportError:  # PY2
+    from urlparse import urljoin
+
+from .bottle import static_file, redirect, request, response, HTTPError, Bottle, template
+from . import __version__
+from .core import listdir, find_packages, store, get_prefixes, exists
+
+log = logging.getLogger('pypiweb.http')
+packages = None
+
+# manage template
+from .bottle import TEMPLATE_PATH
+TEMPLATE_PATH.insert(0,os.path.join(os.path.dirname(__file__), 'template'))
+
+class Configuration(object):
+
+    def __init__(self):
+        self.fallback_url = "http://pypi.python.org/simple"
+        self.redirect_to_fallback = True
+        self.htpasswdfile = None
+
+config = Configuration()
+
+
+def validate_user(username, password):
+    if config.htpasswdfile is not None:
+        config.htpasswdfile.load_if_changed()
+        return config.htpasswdfile.check_password(username, password)
+
+
+class auth(object):
+    "decorator to apply authentication if specified for the decorated method & action"
+
+    def __init__(self, action):
+        self.action = action
+
+    def __call__(self, method):
+
+        def protector(*args, **kwargs):
+            if self.action in config.authenticated:
+                if not request.auth or request.auth[1] is None:
+                    raise HTTPError(
+                        401, header={"WWW-Authenticate": 'Basic realm="pypi"'})
+                if not validate_user(*request.auth):
+                    raise HTTPError(403)
+            return method(*args, **kwargs)
+
+        return protector
+
+
+def configure(root=None,
+              redirect_to_fallback=True,
+              fallback_url=None,
+              authenticated=None,
+              password_file=None,
+              overwrite=False,
+              log_req_frmt=None,
+              log_res_frmt=None,
+              log_err_frmt=None,
+              cache_control=None,
+              add_template=""
+              ):
+    global packages
+
+    log.info("Starting(%s)", dict(root=root,
+                                  redirect_to_fallback=redirect_to_fallback,
+                                  fallback_url=fallback_url,
+                                  authenticated=authenticated,
+                                  password_file=password_file,
+                                  overwrite=overwrite,
+                                  log_req_frmt=log_req_frmt,
+                                  log_res_frmt=log_res_frmt,
+                                  log_err_frmt=log_err_frmt,
+                                  cache_control=cache_control,
+                                  add_template=add_template))
+
+    config.authenticated = authenticated or []
+    if add_template:
+        TEMPLATE_PATH.insert(0, add_template)
+
+    if root is None:
+        root = os.path.expanduser("~/packages")
+
+    if fallback_url is None:
+        fallback_url = "http://pypi.python.org/simple"
+
+    if not isinstance(root, (list, tuple)):
+        roots = [root]
+    else:
+        roots = root
+
+    roots = [os.path.abspath(r) for r in roots]
+    for r in roots:
+        try:
+            os.listdir(r)
+        except OSError:
+            err = sys.exc_info()[1]
+            sys.exit("Error: while trying to list %r: %s" % (r, err))
+
+    packages = lambda: itertools.chain(*[listdir(r) for r in roots])
+    packages.root = roots[0]
+
+    config.redirect_to_fallback = redirect_to_fallback
+    config.fallback_url = fallback_url
+    config.cache_control = cache_control
+    if password_file and password_file != '.':
+        from passlib.apache import HtpasswdFile
+        config.htpasswdfile = HtpasswdFile(password_file)
+    config.overwrite = overwrite
+
+    config.log_req_frmt = log_req_frmt
+    config.log_res_frmt = log_res_frmt
+    config.log_err_frmt = log_err_frmt
+
+app = Bottle()
+
+
+@app.hook('before_request')
+def log_request():
+    log.info(config.log_req_frmt, request.environ)
+
+
+@app.hook('after_request')
+def log_response():
+    log.info(config.log_res_frmt,  # vars(response))  ## DOES NOT WORK!
+             dict(
+                 response=response,
+                 status=response.status, headers=response.headers,
+                 body=response.body, cookies=response._cookies,
+             ))
+
+
+@app.error
+def log_error(http_error):
+    log.info(config.log_err_frmt, vars(http_error))
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return HTTPError(404)
+
+
+@app.route('/')
+def root():
+    fp = request.fullpath
+
+    try:
+        numpkgs = len(list(packages()))
+    except:
+        numpkgs = 0
+
+    # Ensure template() does not consider `msg` as filename!
+    #msg = config.welcome_msg + '\n'
+    return template('welcome',
+                    URL=request.url,
+                    VERSION=__version__,
+                    NUMPKGS=numpkgs,
+                    PACKAGES=urljoin(fp, "packages/"),
+                    SIMPLE=urljoin(fp, "simple/"),
+                    PYPI=urljoin(fp, "pypi/"),
+                    )
+
+
+@app.post('/')
+@auth("update")
+def update():
+    try:
+        action = request.forms[':action']
+    except KeyError:
+        raise HTTPError(400, output=":action field not found")
+
+    if action in ("verify", "submit"):
+        return ""
+
+    if action == "doc_upload":
+        try:
+            content = request.files['content']
+        except KeyError:
+            raise HTTPError(400, output="content file field not found")
+        zip_data = content.file.read()
+        try:
+            zf = zipfile.ZipFile(BytesIO(zip_data))
+            zf.getinfo('index.html')
+        except Exception:
+            raise HTTPError(400, output="not a zip file")
+        return ""
+
+    if action == "remove_pkg":
+        name = request.forms.get("name")
+        version = request.forms.get("version")
+        if not name or not version:
+            raise HTTPError(400, "Name or version not specified")
+        found = None
+        for pkg in find_packages(packages()):
+            if pkg.pkgname == name and pkg.version == version:
+                found = pkg
+                break
+        if found is None:
+            raise HTTPError(404, "%s (%s) not found" % (name, version))
+        os.unlink(found.fn)
+        return ""
+
+    if action != "file_upload":
+        raise HTTPError(400, output="action not supported: %s" % action)
+
+    try:
+        content = request.files['content']
+    except KeyError:
+        raise HTTPError(400, output="content file field not found")
+
+    if "/" in content.filename:
+        raise HTTPError(400, output="bad filename")
+
+    if not config.overwrite and exists(packages.root, content.filename):
+        log.warn("Cannot upload package(%s) since it already exists! \n" +
+                 "  You may use `--overwrite` option when starting server to disable this check. ",
+                 content.filename)
+        raise HTTPError(409, output="file already exists")
+
+    store(packages.root, content.filename, content.save)
+    return ""
+
+
+@app.route("/simple")
+@auth("list")
+def simpleindex_redirect():
+    return redirect(request.fullpath + "/")
+
+
+@app.route("/simple/")
+@auth("list")
+def simpleindex():
+    links = sorted(get_prefixes(packages()))
+    return template("simple", links=links)
+
+
+@app.route("/simple/:prefix")
+@app.route("/simple/:prefix/")
+@auth("list")
+def simple(prefix=""):
+    fp = request.fullpath
+    if not fp.endswith("/"):
+        fp += "/"
+
+    files = [x.relfn for x in sorted(find_packages(
+        packages(), prefix=prefix), key=lambda x: (x.parsed_version, x.relfn))]
+    if not files:
+        if config.redirect_to_fallback:
+            return redirect("%s/%s/" % (config.fallback_url.rstrip("/"), prefix))
+        return HTTPError(404)
+
+    links = [(os.path.basename(f), urljoin(fp, "../../packages/%s" %
+                                           f.replace("\\", "/"))) for f in files]
+    return template('simpleprefix', prefix=prefix, links=links)
+
+
+@app.route('/packages')
+@app.route('/packages/')
+@auth("list")
+def list_packages():
+    fp = request.fullpath
+    if not fp.endswith("/"):
+        fp += "/"
+
+    files = [x.relfn for x in sorted(find_packages(packages()),
+                                     key=lambda x: (os.path.dirname(x.relfn), x.pkgname, x.parsed_version))]
+    links = [(f.replace("\\", "/"), urljoin(fp, f)) for f in files]
+    return template('packages', links=links)
+
+
+@app.route('/packages/:filename#.*#')
+@auth("download")
+def server_static(filename):
+    entries = find_packages(packages())
+    for x in entries:
+        f = x.relfn.replace("\\", "/")
+        if f == filename:
+            response = static_file(
+                filename, root=x.root, mimetype=mimetypes.guess_type(filename)[0])
+            if config.cache_control:
+                response.set_header(
+                    "Cache-Control", "public, max-age=%s" % config.cache_control)
+            return response
+
+    return HTTPError(404)
+
+
+@app.route('/:prefix')
+@app.route('/:prefix/')
+def bad_url(prefix):
+    p = request.fullpath
+    if p.endswith("/"):
+        p = p[:-1]
+    p = p.rsplit('/', 1)[0]
+    p += "/simple/%s/" % prefix
+
+    return redirect(p)
+
+###############################################################################
+####################              ADD by FAO               ####################
+###############################################################################
+import time
+try:
+    from pkginfo import SDist
+    PKGINFO = True
+except:
+    PKGINFO = False
+
+try:
+    from docutils import core
+    from docutils.writers.html4css1 import Writer,HTMLTranslator
+
+    class NoHeaderHTMLTranslator(HTMLTranslator):
+        def __init__(self, document):
+            HTMLTranslator.__init__(self, document)
+            self.head_prefix = ['','','','','']
+            self.body_prefix = []
+            self.body_suffix = []
+            self.stylesheet = []
+
+    _w = Writer()
+    _w.translator_class = NoHeaderHTMLTranslator
+    RESTIFY=True
+except:
+    RESTIFY = False
+
+import math
+if sys.version_info > (3,):
+    long = int
+
+class Size( long ):
+    """ define a size class to allow custom formatting
+        Implements a format specifier of S for the size class - which displays a human readable in b, kb, Mb etc
+    """
+    def __format__(self, fmt):
+        if fmt == "" or fmt[-1] != "S":
+            if fmt[-1].tolower() in ['b','c','d','o','x','n','e','f','g','%']:
+                # Numeric format.
+                return long(self).__format__(fmt)
+            else:
+                return str(self).__format__(fmt)
+
+        val, s = float(self), ["b ","Kb","Mb","Gb","Tb","Pb"]
+        if val<1:
+            # Can't take log(0) in any base.
+            i,v = 0,0
+        else:
+            i = int(math.log(val,1024))+1
+            v = val / math.pow(1024,i)
+            v,i = (v,i) if v > 0.5 else (v*1024,i-1)
+        return ("{0:{1}f}"+s[i]).format(v, fmt[:-1])
+
+class Dist(object):
+
+    def __init__(self, filename):
+        filename = os.path.split(filename)[1]
+        entries = find_packages(packages())
+        for x in entries:
+            f = x.relfn.replace("\\", "/")
+            if f == filename:
+                self.pkg = x
+                self.pkg.name = self.pkg.pkgname
+                self.pkg.ctime = time.strftime('%Y-%m-%d',  time.gmtime(os.path.getmtime(self.pkg.fn)))
+                self.pkg.size = "{0:.1S}".format(Size(os.path.getsize(self.pkg.fn)))
+        if PKGINFO:
+            self.pkginfo = SDist(self.pkg.fn)
+        else:
+            self.pkginfo = None
+
+    def __getattr__(self, name):
+        try:
+            return self.pkginfo.__dict__[name]
+        except:
+            pass
+        try:
+            return self.pkg.__dict__[name]
+        except:
+            pass
+        if name in ('classifiers', 'platforms'):
+            return []
+        if name == 'html':
+            if RESTIFY:
+                return core.publish_string(self.description,writer=_w)
+            return '<div class="document">%s</div>' % self.description.replace('\n','<br/>')
+        return ""
+
+
+@app.route("/pypi")
+@auth("list")
+def simpleindex_redirect():
+    return redirect(request.fullpath + "/")
+
+
+@app.route("/pypi/")
+@auth("list")
+def pypiindex():
+    links = sorted(get_prefixes(packages()))
+    lst = []
+    for prefix in links:
+            files = [[x.relfn, x.fn] for x in sorted(find_packages(
+                packages(), prefix=prefix), key=lambda x: (x.parsed_version, x.relfn))]
+            dist = Dist(files[-1][1])
+            lst.append([prefix, files[-1][0], dist.summary, dist.ctime])
+    return template('pypiindex',
+                        links = lst,
+                        VERSION = __version__,
+                        CNTPKG = len(lst))
+
+@app.route("/pypi/:filename#.*#")
+@auth("list")
+def pypipkg(filename=""):
+    entries = find_packages(packages())
+    for x in entries:
+        f = x.relfn.replace("\\", "/")
+        if f == filename:
+            pkg = x
+            lstpkgs = [Dist(x.fn) for x in sorted(find_packages(
+                packages(), prefix=pkg.pkgname), key=lambda x: (x.parsed_version, x.relfn))]
+            lastpkg = lstpkgs[-1]
+    infopkg = Dist(pkg.fn)
+    return template('pypipkg',
+                    file = filename,
+                    lastfile = lastpkg,
+                    lstpkgs = lstpkgs,
+                    infopkg = infopkg)
+
+@app.route('/static/<path:path>')
+def callback(path):
+    s = [os.path.join(i,'static')  for i in TEMPLATE_PATH if os.path.isfile(os.path.join(i,'static',path))]
+    if s:
+        return static_file(path, root=s[0])
+    return redirect("http://pypi.python.org/static/%s" % path)
